@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -10,8 +10,7 @@ import {
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Pencil, Trash2, Clock, Plus, CheckCircle2 } from "lucide-react";
+import { Pencil, Trash2, Clock, Plus, CheckCircle2, Play, Square, TimerReset } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { cn, minutesToHHMM, formatDate, todayISO } from "@/lib/utils";
@@ -31,10 +30,29 @@ type EntryForm = {
   description: string;
 };
 
+// ─── Timer display helper ────────────────────────────────────────────────────
+function formatElapsed(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  return [
+    h > 0 ? String(h).padStart(2, "0") : null,
+    String(m).padStart(2, "0"),
+    String(s).padStart(2, "0"),
+  ].filter(Boolean).join(":");
+}
+
 export default function TimeEntryPage() {
   const { toast } = useToast();
   const [editId, setEditId] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
+
+  // ── Timer state ─────────────────────────────────────────────────────────────
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startTimeRef = useRef<number>(0); // epoch ms when timer was (last) started
+  const accumulatedRef = useRef<number>(0); // seconds accumulated before last pause
 
   const { data: orgs = [] } = useQuery<Organization[]>({ queryKey: ["/api/organizations"] });
   const { data: allDepts = [] } = useQuery<Department[]>({ queryKey: ["/api/departments"] });
@@ -53,12 +71,14 @@ export default function TimeEntryPage() {
     },
   });
 
-  const selectedOrgId = form.watch("organizationId");
-  const selectedDeptId = form.watch("departmentId");
+  const selectedOrgId = Number(form.watch("organizationId"));
+  const selectedDeptId = Number(form.watch("departmentId"));
 
-  // Derived filtered lists
-  const filteredDepts = allDepts.filter(d => d.organizationId === Number(selectedOrgId));
-  const filteredProjects = allProjects.filter(p => p.departmentIds.includes(Number(selectedDeptId)));
+  // Derived filtered lists — coerce to number to avoid string/number type mismatch
+  const filteredDepts = allDepts.filter(d => d.organizationId === selectedOrgId);
+  const filteredProjects = allProjects.filter(p =>
+    p.departmentIds.map(Number).includes(selectedDeptId)
+  );
 
   // Reset dept when org changes
   useEffect(() => {
@@ -71,7 +91,7 @@ export default function TimeEntryPage() {
     form.setValue("projectId", 0);
   }, [selectedDeptId]);
 
-  // Auto-select org/dept/project if only one option
+  // Auto-select if only one option
   useEffect(() => {
     if (orgs.length === 1 && form.getValues("organizationId") === 0) {
       form.setValue("organizationId", orgs[0].id);
@@ -88,12 +108,61 @@ export default function TimeEntryPage() {
     }
   }, [filteredProjects]);
 
+  // ── Timer logic ──────────────────────────────────────────────────────────────
+  function startTimer() {
+    if (timerRunning) return;
+    startTimeRef.current = Date.now();
+    setTimerRunning(true);
+    timerRef.current = setInterval(() => {
+      const nowSeconds = accumulatedRef.current + Math.floor((Date.now() - startTimeRef.current) / 1000);
+      setElapsedSeconds(nowSeconds);
+    }, 500);
+  }
+
+  function stopTimer() {
+    if (!timerRunning) return;
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
+    accumulatedRef.current += Math.floor((Date.now() - startTimeRef.current) / 1000);
+    setElapsedSeconds(accumulatedRef.current);
+    setTimerRunning(false);
+  }
+
+  function resetTimer() {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
+    accumulatedRef.current = 0;
+    setElapsedSeconds(0);
+    setTimerRunning(false);
+  }
+
+  /** Stop timer and copy elapsed time into the hours/mins fields. */
+  function useTimerTime() {
+    stopTimer();
+    const totalSeconds = accumulatedRef.current;
+    if (totalSeconds === 0) {
+      toast({ title: "Timer is at 0:00", description: "Start the timer first.", variant: "destructive" });
+      return;
+    }
+    const totalMinutes = Math.max(1, Math.round(totalSeconds / 60));
+    form.setValue("hours", Math.floor(totalMinutes / 60));
+    form.setValue("mins", totalMinutes % 60);
+    toast({ title: "Timer time applied", description: `${minutesToHHMM(totalMinutes)} copied to duration.` });
+  }
+
+  // Clean up interval on unmount
+  useEffect(() => {
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, []);
+
+  // ── Mutations ────────────────────────────────────────────────────────────────
   const createMut = useMutation({
     mutationFn: (data: z.infer<typeof insertTimeEntrySchema>) =>
       apiRequest("POST", "/api/time-entries", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] });
       form.reset({ date: todayISO(), organizationId: form.getValues("organizationId"), departmentId: form.getValues("departmentId"), projectId: 0, hours: 0, mins: 0, description: "" });
+      resetTimer();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     },
@@ -106,6 +175,7 @@ export default function TimeEntryPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] });
       setEditId(null);
       form.reset({ date: todayISO(), organizationId: 0, departmentId: 0, projectId: 0, hours: 0, mins: 0, description: "" });
+      resetTimer();
       toast({ title: "Entry updated" });
     },
   });
@@ -142,6 +212,7 @@ export default function TimeEntryPage() {
 
   function startEdit(entry: TimeEntry) {
     setEditId(entry.id);
+    resetTimer();
     form.reset({
       date: entry.date,
       organizationId: entry.organizationId,
@@ -155,6 +226,7 @@ export default function TimeEntryPage() {
 
   function cancelEdit() {
     setEditId(null);
+    resetTimer();
     form.reset({ date: todayISO(), organizationId: 0, departmentId: 0, projectId: 0, hours: 0, mins: 0, description: "" });
   }
 
@@ -180,6 +252,75 @@ export default function TimeEntryPage() {
             Set up your organizations, departments, and projects in <strong>Admin</strong> before logging time.
           </div>
         )}
+
+        {/* ── Timer panel ── */}
+        <div className="mb-6 p-4 rounded-lg border bg-card">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Clock size={16} className="text-muted-foreground shrink-0" />
+              <span
+                className={cn(
+                  "font-mono text-2xl font-semibold tabular-nums tracking-tight",
+                  timerRunning && "text-primary"
+                )}
+              >
+                {formatElapsed(elapsedSeconds)}
+              </span>
+              {timerRunning && (
+                <span className="text-xs text-primary animate-pulse font-medium">RUNNING</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {!timerRunning ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={startTimer}
+                  disabled={noSetup}
+                  className="gap-1.5"
+                >
+                  <Play size={13} /> Start
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={stopTimer}
+                  className="gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
+                >
+                  <Square size={13} /> Stop
+                </Button>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={useTimerTime}
+                disabled={elapsedSeconds === 0}
+                className="gap-1.5 text-muted-foreground"
+                title="Stop timer and copy elapsed time to duration fields"
+              >
+                <TimerReset size={13} /> Use Time
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={resetTimer}
+                disabled={elapsedSeconds === 0}
+                className="text-muted-foreground px-2"
+                title="Reset timer"
+              >
+                ✕
+              </Button>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Use the timer to track time live, then click <strong>Use Time</strong> to fill the duration below.
+          </p>
+        </div>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
