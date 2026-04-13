@@ -74,8 +74,7 @@ export default function TimeEntryPage() {
   const selectedOrgId = Number(form.watch("organizationId"));
   const selectedDeptId = Number(form.watch("departmentId"));
 
-  // Derived filtered lists — memoised so references only change when data changes,
-  // preventing useEffect dependency loops that clear the selections on every render.
+  // Derived filtered lists — memoised so references only change when underlying data changes.
   const filteredDepts = useMemo(
     () => allDepts.filter(d => d.organizationId === selectedOrgId),
     [allDepts, selectedOrgId]
@@ -85,33 +84,13 @@ export default function TimeEntryPage() {
     [allProjects, selectedDeptId]
   );
 
-  // Reset dept when org changes
-  useEffect(() => {
-    form.setValue("departmentId", 0);
-    form.setValue("projectId", 0);
-  }, [selectedOrgId]);
-
-  // Reset project when dept changes
-  useEffect(() => {
-    form.setValue("projectId", 0);
-  }, [selectedDeptId]);
-
-  // Auto-select if only one option
+  // Auto-select org if only one exists and none chosen yet (runs once on load)
   useEffect(() => {
     if (orgs.length === 1 && form.getValues("organizationId") === 0) {
       form.setValue("organizationId", orgs[0].id);
     }
-  }, [orgs]);
-  useEffect(() => {
-    if (filteredDepts.length === 1 && form.getValues("departmentId") === 0) {
-      form.setValue("departmentId", filteredDepts[0].id);
-    }
-  }, [filteredDepts]);
-  useEffect(() => {
-    if (filteredProjects.length === 1 && form.getValues("projectId") === 0) {
-      form.setValue("projectId", filteredProjects[0].id);
-    }
-  }, [filteredProjects]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgs.length]);
 
   // ── Timer logic ──────────────────────────────────────────────────────────────
   function startTimer() {
@@ -348,7 +327,21 @@ export default function TimeEntryPage() {
                   <select
                     data-testid="select-org"
                     value={field.value}
-                    onChange={e => field.onChange(Number(e.target.value))}
+                    onChange={e => {
+                      const orgId = Number(e.target.value);
+                      field.onChange(orgId);
+                      // Reset downstream selections
+                      form.setValue("departmentId", 0);
+                      form.setValue("projectId", 0);
+                      // Auto-select dept if only one in this org
+                      const depts = allDepts.filter(d => d.organizationId === orgId);
+                      if (depts.length === 1) {
+                        form.setValue("departmentId", depts[0].id);
+                        // Auto-select project if only one in that dept
+                        const projs = allProjects.filter(p => p.departmentIds.includes(depts[0].id));
+                        if (projs.length === 1) form.setValue("projectId", projs[0].id);
+                      }
+                    }}
                     className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
                     disabled={noSetup}
                   >
@@ -367,7 +360,14 @@ export default function TimeEntryPage() {
                   <select
                     data-testid="select-department"
                     value={field.value}
-                    onChange={e => field.onChange(Number(e.target.value))}
+                    onChange={e => {
+                      const deptId = Number(e.target.value);
+                      field.onChange(deptId);
+                      // Reset project and auto-select if only one
+                      form.setValue("projectId", 0);
+                      const projs = allProjects.filter(p => p.departmentIds.includes(deptId));
+                      if (projs.length === 1) form.setValue("projectId", projs[0].id);
+                    }}
                     className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
                     disabled={!selectedOrgId || filteredDepts.length === 0}
                   >
