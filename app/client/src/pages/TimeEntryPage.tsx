@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -74,10 +74,15 @@ export default function TimeEntryPage() {
   const selectedOrgId = Number(form.watch("organizationId"));
   const selectedDeptId = Number(form.watch("departmentId"));
 
-  // Derived filtered lists — coerce to number to avoid string/number type mismatch
-  const filteredDepts = allDepts.filter(d => d.organizationId === selectedOrgId);
-  const filteredProjects = allProjects.filter(p =>
-    p.departmentIds.map(Number).includes(selectedDeptId)
+  // Derived filtered lists — memoised so references only change when data changes,
+  // preventing useEffect dependency loops that clear the selections on every render.
+  const filteredDepts = useMemo(
+    () => allDepts.filter(d => d.organizationId === selectedOrgId),
+    [allDepts, selectedOrgId]
+  );
+  const filteredProjects = useMemo(
+    () => allProjects.filter(p => p.departmentIds.includes(selectedDeptId)),
+    [allProjects, selectedDeptId]
   );
 
   // Reset dept when org changes
