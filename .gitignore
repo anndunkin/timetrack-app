@@ -1,0 +1,5 @@
+node_modules/
+dist-electron/
+app/node_modules/
+app/dist/
+app/timetracker.db

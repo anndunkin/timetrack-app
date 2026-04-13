@@ -1,0 +1,143 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Slate-teal palette — precise, professional, data-dense */
+    --background: 220 18% 96%;
+    --foreground: 222 30% 12%;
+    --card: 220 20% 98%;
+    --card-foreground: 222 30% 12%;
+    --popover: 220 20% 98%;
+    --popover-foreground: 222 30% 12%;
+    --primary: 192 90% 22%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 15% 91%;
+    --secondary-foreground: 222 25% 25%;
+    --muted: 220 15% 91%;
+    --muted-foreground: 220 10% 50%;
+    --accent: 192 60% 90%;
+    --accent-foreground: 192 90% 20%;
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 12% 85%;
+    --input: 220 12% 88%;
+    --ring: 192 90% 22%;
+    --radius: 0.5rem;
+
+    /* Chart colors */
+    --chart-1: 192 75% 32%;
+    --chart-2: 20 73% 44%;
+    --chart-3: 192 55% 22%;
+    --chart-4: 192 40% 78%;
+    --chart-5: 320 57% 45%;
+
+    /* Sidebar */
+    --sidebar-background: 222 28% 14%;
+    --sidebar-foreground: 220 15% 80%;
+    --sidebar-primary: 192 75% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 22% 20%;
+    --sidebar-accent-foreground: 220 15% 90%;
+    --sidebar-border: 222 20% 20%;
+    --sidebar-ring: 192 75% 40%;
+  }
+
+  .dark {
+    --background: 222 28% 9%;
+    --foreground: 220 15% 88%;
+    --card: 222 25% 12%;
+    --card-foreground: 220 15% 88%;
+    --popover: 222 25% 12%;
+    --popover-foreground: 220 15% 88%;
+    --primary: 192 60% 48%;
+    --primary-foreground: 222 30% 8%;
+    --secondary: 222 20% 18%;
+    --secondary-foreground: 220 15% 80%;
+    --muted: 222 20% 18%;
+    --muted-foreground: 220 10% 55%;
+    --accent: 192 35% 22%;
+    --accent-foreground: 192 60% 70%;
+    --destructive: 0 60% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 222 18% 22%;
+    --input: 222 18% 22%;
+    --ring: 192 60% 48%;
+
+    --sidebar-background: 222 30% 7%;
+    --sidebar-foreground: 220 12% 75%;
+    --sidebar-primary: 192 60% 48%;
+    --sidebar-primary-foreground: 222 30% 8%;
+    --sidebar-accent: 222 25% 13%;
+    --sidebar-accent-foreground: 220 15% 85%;
+    --sidebar-border: 222 22% 14%;
+    --sidebar-ring: 192 60% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    min-height: 100dvh;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    font-weight: 600;
+    line-height: 1.2;
+    text-wrap: balance;
+  }
+
+  input, button, select, textarea {
+    font: inherit;
+  }
+
+  ::selection {
+    background: hsl(192 75% 32% / 0.25);
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* Time badge utility */
+.time-badge {
+  @apply inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium;
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+/* Color dot */
+.color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}

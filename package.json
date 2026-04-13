@@ -1,0 +1,62 @@
+{
+  "name": "timetrack",
+  "productName": "TimeTrack",
+  "version": "1.0.0",
+  "description": "Desktop time tracking application",
+  "main": "main.js",
+  "author": "TimeTrack",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build-app": "cd app && npm install && npm run build",
+    "make": "npm run build-app && electron-builder --win --x64",
+    "make:dir": "npm run build-app && electron-builder --win --x64 --dir"
+  },
+  "build": {
+    "appId": "com.timetrack.app",
+    "productName": "TimeTrack",
+    "copyright": "Copyright © 2026 TimeTrack",
+    "buildDependenciesFromSource": false,
+    "npmRebuild": false,
+    "directories": {
+      "output": "dist-electron",
+      "app": "."
+    },
+    "files": [
+      "main.js",
+      "app/dist/**/*",
+      "build/icon.ico",
+      "!**/node_modules/**/*"
+    ],
+    "asarUnpack": [
+      "app/dist/**/*"
+    ],
+    "extraResources": [],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "TimeTrack",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "deleteAppDataOnUninstall": false
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}
