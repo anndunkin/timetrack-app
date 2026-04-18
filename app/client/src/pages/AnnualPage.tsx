@@ -219,7 +219,7 @@ export default function AnnualPage() {
             </div>
           </section>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             {/* By Organization */}
             {byOrg.length > 0 && (
               <section>
