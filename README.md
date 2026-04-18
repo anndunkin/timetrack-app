@@ -176,5 +176,5 @@ timetracker-electron/
 
 | Tag | Description |
 |-----|-------------|
-| v1.1.0 | Multi-file support — File menu in sidebar, create/open/switch database files at runtime |
+| v1.1.0 | Multi-file support — File menu in sidebar, create/open/switch database files at runtime; fix Annual dept list truncation |
 | v1.0 / v1.0.0 | Initial stable release — core time tracking, multi-dept entries, live timer, weekly/annual summaries, timezone-safe date handling |
