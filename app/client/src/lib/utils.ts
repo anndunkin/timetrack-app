@@ -19,6 +19,14 @@ export function hhmToMinutes(h: number, m: number): number {
   return h * 60 + m;
 }
 
+/** Format a Date as YYYY-MM-DD in local time (avoids UTC offset shifting the date). */
+function localISO(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 /** ISO week start (Monday) */
 export function getWeekRange(date: Date): { start: string; end: string } {
   const d = new Date(date);
@@ -29,8 +37,8 @@ export function getWeekRange(date: Date): { start: string; end: string } {
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
   return {
-    start: monday.toISOString().slice(0, 10),
-    end: sunday.toISOString().slice(0, 10),
+    start: localISO(monday),
+    end: localISO(sunday),
   };
 }
 
@@ -41,7 +49,7 @@ export function formatDate(iso: string): string {
 }
 
 export function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localISO(new Date());
 }
 
 /** Given a custom year start (month 1-12, day 1-31), compute the current year range */
@@ -61,8 +69,8 @@ export function getYearRange(yearStartMonth: number, yearStartDay: number): { st
   end.setDate(end.getDate() - 1);
 
   return {
-    start: start.toISOString().slice(0, 10),
-    end: end.toISOString().slice(0, 10),
+    start: localISO(start),
+    end: localISO(end),
   };
 }
 
@@ -70,7 +78,7 @@ export function isoWeekDays(weekStart: string): string[] {
   const days: string[] = [];
   const d = new Date(weekStart + "T00:00:00");
   for (let i = 0; i < 7; i++) {
-    days.push(d.toISOString().slice(0, 10));
+    days.push(localISO(d));
     d.setDate(d.getDate() + 1);
   }
   return days;
