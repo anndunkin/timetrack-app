@@ -11,54 +11,62 @@ import {
 
 // ─── DB setup ────────────────────────────────────────────────────────────────
 
-const DB_PATH = process.env.DB_PATH
+let DB_PATH = process.env.DB_PATH
   ? path.resolve(process.env.DB_PATH)
   : path.join(process.cwd(), "timetracker.db");
 
 let db: SqlJsDatabase;
+let SQL: Awaited<ReturnType<typeof initSqlJs>> | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Load or create the SQLite database using sql.js (pure WebAssembly — no
  * native compilation required).
  */
-export async function initDb(): Promise<void> {
-  // Locate the WASM file relative to the compiled bundle in production,
-  // or from the sql.js package in development.
-  const SQL = await initSqlJs({
-    locateFile: (file: string) => {
-      // SQLJS_WASM_PATH is set by Electron's main process to the dist/ folder
-      if (process.env.SQLJS_WASM_PATH) {
-        return path.join(process.env.SQLJS_WASM_PATH, file);
-      }
-      // Fallback for dev: use sql.js package's own dist folder
-      try {
-        const sqlJsDist = require.resolve("sql.js").replace(/[\\/]dist[\\/].*$/, "/dist");
-        return path.join(sqlJsDist, file);
-      } catch {
-        return file;
-      }
-    },
-  });
-
-  if (fs.existsSync(DB_PATH)) {
-    const buf = fs.readFileSync(DB_PATH);
-    db = new SQL.Database(buf);
-  } else {
-    db = new SQL.Database();
+function locateWasm(file: string): string {
+  if (process.env.SQLJS_WASM_PATH) {
+    return path.join(process.env.SQLJS_WASM_PATH, file);
   }
+  try {
+    const sqlJsDist = require.resolve("sql.js").replace(/[\\/]dist[\\/].*$/, "/dist");
+    return path.join(sqlJsDist, file);
+  } catch {
+    return file;
+  }
+}
 
-  // Ensure parent directory exists
-  const dir = path.dirname(DB_PATH);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
-  runMigrations();
-  seedDefaults();
+export async function initDb(): Promise<void> {
+  SQL = await initSqlJs({ locateFile: locateWasm });
+  await loadDb(DB_PATH);
 
   // Persist on process exit
   process.on("exit", () => flushSync());
   process.on("SIGINT", () => { flushSync(); process.exit(0); });
   process.on("SIGTERM", () => { flushSync(); process.exit(0); });
+}
+
+/** Switch to a different database file at runtime. Flushes current DB first. */
+export async function switchDb(newPath: string): Promise<void> {
+  flushSync(); // save current DB before switching
+  if (db) { try { db.close(); } catch (_) {} }
+  DB_PATH = path.resolve(newPath);
+  await loadDb(DB_PATH);
+}
+
+/** Load (or create) a database file and run migrations. */
+async function loadDb(dbPath: string): Promise<void> {
+  const dir = path.dirname(dbPath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  if (fs.existsSync(dbPath)) {
+    const buf = fs.readFileSync(dbPath);
+    db = new SQL!.Database(buf);
+  } else {
+    db = new SQL!.Database();
+  }
+
+  runMigrations();
+  seedDefaults();
 }
 
 /** Write the in-memory DB to disk immediately. */

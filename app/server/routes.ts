@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { type Server } from "http";
-import { storage } from "./storage";
+import { storage, switchDb } from "./storage";
 import {
   insertOrganizationSchema,
   insertDepartmentSchema,
@@ -109,6 +109,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const parsed = insertSettingsSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
     res.json(storage.updateSettings(parsed.data));
+  });
+
+  // -- File switching (called by Electron main process IPC handlers) --
+  app.post("/api/files/switch", async (req, res) => {
+    const { path: dbPath } = req.body as { path?: string };
+    if (!dbPath) return res.status(400).json({ error: "path is required" });
+    try {
+      await switchDb(dbPath);
+      res.json({ ok: true, path: dbPath });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to switch database" });
+    }
   });
 
   return httpServer;
