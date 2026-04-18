@@ -41,7 +41,10 @@
         }
       ],
       "icon": "build/icon.ico",
-      "requestedExecutionLevel": "asInvoker"
+      "requestedExecutionLevel": "asInvoker",
+      "forceCodeSigning": false,
+      "signingHashAlgorithms": [],
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,

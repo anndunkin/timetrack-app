@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, dialog, ipcMain, Menu } = require('electron');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
@@ -60,6 +60,202 @@ function ensureDefaultFile() {
   return registry[0]; // active file is always first
 }
 
+// ─── Native application menu ──────────────────────────────────────────────────
+
+/**
+ * Build and set the native Electron application menu.
+ * Called on startup and whenever the file registry changes.
+ */
+function buildMenu() {
+  const registry = readRegistry();
+  const active = registry[0];
+
+  // File submenu items: one per known file (checkmark on active), then actions
+  const fileItems = [];
+
+  if (registry.length > 0) {
+    registry.forEach(f => {
+      fileItems.push({
+        label: f.name,
+        type: 'checkbox',
+        checked: active && f.path === active.path,
+        click: async () => {
+          if (active && f.path === active.path) return; // already active
+          await doSwitch(f.path);
+        },
+      });
+    });
+    fileItems.push({ type: 'separator' });
+  }
+
+  fileItems.push({
+    label: 'New File…',
+    accelerator: 'CmdOrCtrl+N',
+    click: async () => {
+      await doNewFile();
+    },
+  });
+
+  fileItems.push({
+    label: 'Open File…',
+    accelerator: 'CmdOrCtrl+O',
+    click: async () => {
+      await doOpenFile();
+    },
+  });
+
+  fileItems.push({ type: 'separator' });
+
+  fileItems.push({
+    label: 'Exit',
+    accelerator: 'Alt+F4',
+    click: () => app.quit(),
+  });
+
+  const template = [
+    {
+      label: 'File',
+      submenu: fileItems,
+    },
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
+// ─── File operation helpers (shared by IPC handlers and native menu) ──────────
+
+/**
+ * Switch to an existing file by path. Updates registry, tells server, notifies renderer.
+ */
+async function doSwitch(filePath) {
+  const registry = readRegistry();
+  const idx = registry.findIndex(f => f.path === filePath);
+  if (idx === -1) return { error: 'File not found in registry' };
+
+  const [chosen] = registry.splice(idx, 1);
+  registry.unshift(chosen);
+  writeRegistry(registry);
+
+  try {
+    await fetch(`http://127.0.0.1:${PORT}/api/files/switch`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: filePath }),
+    });
+  } catch (err) {
+    return { error: err.message };
+  }
+
+  buildMenu(); // refresh checkmarks
+  notifyRenderer();
+  return { ok: true, active: chosen };
+}
+
+/**
+ * Prompt for a name then a folder, create a new DB entry.
+ */
+async function doNewFile() {
+  if (!mainWindow) return { error: 'No window' };
+
+  // Ask for a name via an input dialog (Electron has no built-in text prompt,
+  // so we use a small browser-side dialog via IPC instead — see preload)
+  const nameResult = await dialog.showSaveDialog(mainWindow, {
+    title: 'Create New TimeTrack Database',
+    defaultPath: path.join(app.getPath('documents'), 'timetracker.db'),
+    filters: [{ name: 'TimeTrack Database', extensions: ['db'] }],
+    buttonLabel: 'Create',
+  });
+
+  if (nameResult.canceled || !nameResult.filePath) return { canceled: true };
+
+  const filePath = nameResult.filePath.endsWith('.db')
+    ? nameResult.filePath
+    : nameResult.filePath + '.db';
+
+  if (fs.existsSync(filePath)) {
+    dialog.showErrorBox('TimeTrack', `File already exists:\n${filePath}`);
+    return { error: 'File already exists' };
+  }
+
+  // Derive display name from filename
+  const name = path.basename(filePath, '.db');
+  const entry = { name, path: filePath };
+
+  const registry = readRegistry();
+  registry.unshift(entry);
+  writeRegistry(registry);
+
+  try {
+    await fetch(`http://127.0.0.1:${PORT}/api/files/switch`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: filePath }),
+    });
+  } catch (err) {
+    return { error: err.message };
+  }
+
+  buildMenu();
+  notifyRenderer();
+  return { ok: true, active: entry };
+}
+
+/**
+ * Show an open-file dialog and switch to the chosen .db.
+ */
+async function doOpenFile() {
+  if (!mainWindow) return { error: 'No window' };
+
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Open TimeTrack Database',
+    filters: [{ name: 'TimeTrack Database', extensions: ['db'] }],
+    properties: ['openFile'],
+  });
+  if (result.canceled || !result.filePaths.length) return { canceled: true };
+
+  const filePath = result.filePaths[0];
+  const registry = readRegistry();
+
+  const existing = registry.find(f => f.path === filePath);
+  if (existing) {
+    const idx = registry.indexOf(existing);
+    registry.splice(idx, 1);
+    registry.unshift(existing);
+    writeRegistry(registry);
+  } else {
+    const name = path.basename(filePath, '.db');
+    const entry = { name, path: filePath };
+    registry.unshift(entry);
+    writeRegistry(registry);
+  }
+
+  const active = readRegistry()[0];
+
+  try {
+    await fetch(`http://127.0.0.1:${PORT}/api/files/switch`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: filePath }),
+    });
+  } catch (err) {
+    return { error: err.message };
+  }
+
+  buildMenu();
+  notifyRenderer();
+  return { ok: true, active };
+}
+
+/**
+ * Tell the renderer to clear its query cache and reload data.
+ */
+function notifyRenderer() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('files:reloaded', readRegistry());
+  }
+}
+
 // ─── Server startup ───────────────────────────────────────────────────────────
 
 function waitForServer(port, timeoutMs = 30000) {
@@ -107,41 +303,15 @@ function startServer(dbPath) {
 
 // ─── IPC handlers ─────────────────────────────────────────────────────────────
 
-/**
- * GET /ipc/files — return the registry array
- * The active file is always registry[0].
- */
+/** Return the registry array (active file is always index 0). */
 ipcMain.handle('files:list', () => readRegistry());
 
-/**
- * Switch the active database to an existing registry entry by path.
- * Moves the chosen entry to index 0, then asks the server to reload.
- */
-ipcMain.handle('files:switch', async (_event, filePath) => {
-  const registry = readRegistry();
-  const idx = registry.findIndex(f => f.path === filePath);
-  if (idx === -1) return { error: 'File not found in registry' };
-
-  // Move chosen entry to front (= active)
-  const [chosen] = registry.splice(idx, 1);
-  registry.unshift(chosen);
-  writeRegistry(registry);
-
-  // Tell the server to switch databases
-  try {
-    await fetch(`http://127.0.0.1:${PORT}/api/files/switch`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ path: filePath }),
-    });
-  } catch (err) {
-    return { error: err.message };
-  }
-  return { ok: true, active: chosen };
-});
+/** Switch active database to an existing registry entry by path. */
+ipcMain.handle('files:switch', async (_event, filePath) => doSwitch(filePath));
 
 /**
  * Create a new database file.
+ * name parameter comes from the renderer's NewFileDialog.
  * Shows a native folder-picker dialog, then creates the .db file.
  */
 ipcMain.handle('files:new', async (_event, name) => {
@@ -154,7 +324,6 @@ ipcMain.handle('files:new', async (_event, name) => {
   if (result.canceled || !result.filePaths.length) return { canceled: true };
 
   const folder   = result.filePaths[0];
-  // Sanitise name for use as filename
   const safeName = name.trim().replace(/[\\/:*?"<>|]/g, '_');
   const filePath = path.join(folder, `${safeName}.db`);
 
@@ -162,13 +331,11 @@ ipcMain.handle('files:new', async (_event, name) => {
     return { error: `A file named "${safeName}.db" already exists in that folder.` };
   }
 
-  // Register first so the server knows about it
   const registry = readRegistry();
   const entry = { name: name.trim(), path: filePath };
-  registry.unshift(entry); // new file becomes active
+  registry.unshift(entry);
   writeRegistry(registry);
 
-  // Ask the server to switch (it will create the file on first write)
   try {
     await fetch(`http://127.0.0.1:${PORT}/api/files/switch`, {
       method: 'POST',
@@ -179,52 +346,13 @@ ipcMain.handle('files:new', async (_event, name) => {
     return { error: err.message };
   }
 
+  buildMenu();
+  notifyRenderer();
   return { ok: true, active: entry };
 });
 
-/**
- * Open an existing .db file not yet in the registry.
- */
-ipcMain.handle('files:open', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
-    title: 'Open TimeTrack database',
-    filters: [{ name: 'TimeTrack Database', extensions: ['db'] }],
-    properties: ['openFile'],
-  });
-  if (result.canceled || !result.filePaths.length) return { canceled: true };
-
-  const filePath = result.filePaths[0];
-  const registry = readRegistry();
-
-  // If already known, just switch to it
-  const existing = registry.find(f => f.path === filePath);
-  if (existing) {
-    const idx = registry.indexOf(existing);
-    registry.splice(idx, 1);
-    registry.unshift(existing);
-    writeRegistry(registry);
-  } else {
-    // Derive a display name from the filename
-    const name = path.basename(filePath, '.db');
-    const entry = { name, path: filePath };
-    registry.unshift(entry);
-    writeRegistry(registry);
-  }
-
-  const active = registry[0];
-
-  try {
-    await fetch(`http://127.0.0.1:${PORT}/api/files/switch`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ path: filePath }),
-    });
-  } catch (err) {
-    return { error: err.message };
-  }
-
-  return { ok: true, active };
-});
+/** Open an existing .db file not yet in the registry. */
+ipcMain.handle('files:open', async () => doOpenFile());
 
 // ─── Window ───────────────────────────────────────────────────────────────────
 
@@ -239,7 +367,8 @@ async function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(getAppDir(), 'preload.js'),
+      // __dirname in the main process always points to the app root — correct for preload
+      preload: path.join(__dirname, 'preload.js'),
     },
     backgroundColor: '#0f1623',
     show: false,
@@ -292,6 +421,7 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     const activeFile = ensureDefaultFile();
+    buildMenu(); // set up native File menu before window opens
     startServer(activeFile.path);
     createWindow();
 
