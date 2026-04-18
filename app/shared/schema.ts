@@ -51,7 +51,8 @@ export type TimeEntry = {
   date: string; // YYYY-MM-DD
   minutes: number;
   organizationId: number;
-  departmentId: number;
+  /** All departments this entry is split across (at least one). */
+  departmentIds: number[];
   projectId: number;
   description: string | null;
 };
@@ -59,7 +60,7 @@ export const insertTimeEntrySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD"),
   minutes: z.number().int().positive("Duration must be positive"),
   organizationId: z.number().int().positive(),
-  departmentId: z.number().int().positive(),
+  departmentIds: z.array(z.number().int().positive()).min(1, "Select at least one department"),
   projectId: z.number().int().positive(),
   description: z.string().optional().nullable(),
 });

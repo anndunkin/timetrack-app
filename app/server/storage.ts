@@ -151,6 +151,18 @@ function runMigrations(): void {
       year_start_day   INTEGER NOT NULL DEFAULT 1
     );
   `);
+
+  // Migration: add department_ids column to time_entries if it doesn't exist.
+  // Existing rows get a JSON array containing their single department_id value,
+  // so no data is lost and all old entries continue to work correctly.
+  const cols = db.exec("PRAGMA table_info(time_entries)");
+  const colNames = cols[0]?.values.map((r) => r[1] as string) ?? [];
+  if (!colNames.includes("department_ids")) {
+    db.run("ALTER TABLE time_entries ADD COLUMN department_ids TEXT NOT NULL DEFAULT '[]'");
+    // Back-fill: wrap each existing department_id into a JSON array
+    db.run("UPDATE time_entries SET department_ids = json_array(department_id) WHERE department_ids = '[]'");
+    flushSync();
+  }
 }
 
 function seedDefaults(): void {
@@ -183,12 +195,25 @@ function mapProject(r: Record<string, unknown>): Project {
 }
 
 function mapTimeEntry(r: Record<string, unknown>): TimeEntry {
+  // department_ids is a JSON array string e.g. "[1,2]"
+  // Fall back to wrapping the legacy department_id if for any reason the new
+  // column is missing or empty.
+  let departmentIds: number[];
+  try {
+    const raw = r.department_ids as string;
+    departmentIds = raw ? JSON.parse(raw) as number[] : [];
+  } catch {
+    departmentIds = [];
+  }
+  if (departmentIds.length === 0 && r.department_id) {
+    departmentIds = [r.department_id as number];
+  }
   return {
     id: r.id as number,
     date: r.date as string,
     minutes: r.minutes as number,
     organizationId: r.organization_id as number,
-    departmentId: r.department_id as number,
+    departmentIds,
     projectId: r.project_id as number,
     description: r.description as string | null,
   };
@@ -316,16 +341,22 @@ export const storage: IStorage = {
     ).map(mapTimeEntry);
   },
   createTimeEntry(data) {
+    // Store the first dept in the legacy column for backward compat, and the
+    // full array in department_ids.
+    const primaryDept = data.departmentIds[0];
+    const deptIdsJson = JSON.stringify(data.departmentIds);
     const id = run(
-      "INSERT INTO time_entries (date, minutes, organization_id, department_id, project_id, description) VALUES (?, ?, ?, ?, ?, ?)",
-      [data.date, data.minutes, data.organizationId, data.departmentId, data.projectId, data.description ?? null],
+      "INSERT INTO time_entries (date, minutes, organization_id, department_id, department_ids, project_id, description) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [data.date, data.minutes, data.organizationId, primaryDept, deptIdsJson, data.projectId, data.description ?? null],
     );
     return mapTimeEntry(first<Record<string, unknown>>("SELECT * FROM time_entries WHERE id = ?", [id])!);
   },
   updateTimeEntry(id, data) {
+    const primaryDept = data.departmentIds[0];
+    const deptIdsJson = JSON.stringify(data.departmentIds);
     run(
-      "UPDATE time_entries SET date = ?, minutes = ?, organization_id = ?, department_id = ?, project_id = ?, description = ? WHERE id = ?",
-      [data.date, data.minutes, data.organizationId, data.departmentId, data.projectId, data.description ?? null, id],
+      "UPDATE time_entries SET date = ?, minutes = ?, organization_id = ?, department_id = ?, department_ids = ?, project_id = ?, description = ? WHERE id = ?",
+      [data.date, data.minutes, data.organizationId, primaryDept, deptIdsJson, data.projectId, data.description ?? null, id],
     );
     const row = first<Record<string, unknown>>("SELECT * FROM time_entries WHERE id = ?", [id]);
     return row ? mapTimeEntry(row) : undefined;

@@ -23,7 +23,7 @@ const entrySchema = insertTimeEntrySchema.extend({
 type EntryForm = {
   date: string;
   organizationId: number;
-  departmentId: number;
+  selectedDeptIds: number[];   // multi-select departments
   projectId: number;
   hours: number;
   mins: number;
@@ -51,8 +51,8 @@ export default function TimeEntryPage() {
   const [timerRunning, setTimerRunning] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startTimeRef = useRef<number>(0); // epoch ms when timer was (last) started
-  const accumulatedRef = useRef<number>(0); // seconds accumulated before last pause
+  const startTimeRef = useRef<number>(0);
+  const accumulatedRef = useRef<number>(0);
 
   const { data: orgs = [] } = useQuery<Organization[]>({ queryKey: ["/api/organizations"] });
   const { data: allDepts = [] } = useQuery<Department[]>({ queryKey: ["/api/departments"] });
@@ -63,7 +63,7 @@ export default function TimeEntryPage() {
     defaultValues: {
       date: todayISO(),
       organizationId: 0,
-      departmentId: 0,
+      selectedDeptIds: [],
       projectId: 0,
       hours: 0,
       mins: 0,
@@ -72,19 +72,24 @@ export default function TimeEntryPage() {
   });
 
   const selectedOrgId = Number(form.watch("organizationId"));
-  const selectedDeptId = Number(form.watch("departmentId"));
+  const selectedDeptIds = form.watch("selectedDeptIds") ?? [];
 
-  // Derived filtered lists — memoised so references only change when underlying data changes.
+  // Departments filtered by selected org
   const filteredDepts = useMemo(
     () => allDepts.filter(d => d.organizationId === selectedOrgId),
     [allDepts, selectedOrgId]
   );
-  const filteredProjects = useMemo(
-    () => allProjects.filter(p => p.departmentIds.includes(selectedDeptId)),
-    [allProjects, selectedDeptId]
-  );
 
-  // Auto-select org if only one exists and none chosen yet (runs once on load)
+  // Projects that belong to ALL selected departments (must be in every chosen dept)
+  // If no dept selected yet, show nothing.
+  const filteredProjects = useMemo(() => {
+    if (selectedDeptIds.length === 0) return [];
+    return allProjects.filter(p =>
+      selectedDeptIds.every(dId => p.departmentIds.includes(dId))
+    );
+  }, [allProjects, selectedDeptIds]);
+
+  // Auto-select org on load if only one exists
   useEffect(() => {
     if (orgs.length === 1 && form.getValues("organizationId") === 0) {
       form.setValue("organizationId", orgs[0].id);
@@ -98,8 +103,7 @@ export default function TimeEntryPage() {
     startTimeRef.current = Date.now();
     setTimerRunning(true);
     timerRef.current = setInterval(() => {
-      const nowSeconds = accumulatedRef.current + Math.floor((Date.now() - startTimeRef.current) / 1000);
-      setElapsedSeconds(nowSeconds);
+      setElapsedSeconds(accumulatedRef.current + Math.floor((Date.now() - startTimeRef.current) / 1000));
     }, 500);
   }
 
@@ -120,7 +124,6 @@ export default function TimeEntryPage() {
     setTimerRunning(false);
   }
 
-  /** Stop timer and copy elapsed time into the hours/mins fields. */
   function useTimerTime() {
     stopTimer();
     const totalSeconds = accumulatedRef.current;
@@ -134,10 +137,20 @@ export default function TimeEntryPage() {
     toast({ title: "Timer time applied", description: `${minutesToHHMM(totalMinutes)} copied to duration.` });
   }
 
-  // Clean up interval on unmount
   useEffect(() => {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, []);
+
+  // ── Dept toggle helper ───────────────────────────────────────────────────────
+  function toggleDept(deptId: number) {
+    const current = form.getValues("selectedDeptIds");
+    const next = current.includes(deptId)
+      ? current.filter(id => id !== deptId)
+      : [...current, deptId];
+    form.setValue("selectedDeptIds", next);
+    // Reset project when dept selection changes
+    form.setValue("projectId", 0);
+  }
 
   // ── Mutations ────────────────────────────────────────────────────────────────
   const createMut = useMutation({
@@ -145,7 +158,15 @@ export default function TimeEntryPage() {
       apiRequest("POST", "/api/time-entries", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] });
-      form.reset({ date: todayISO(), organizationId: form.getValues("organizationId"), departmentId: form.getValues("departmentId"), projectId: 0, hours: 0, mins: 0, description: "" });
+      form.reset({
+        date: todayISO(),
+        organizationId: form.getValues("organizationId"),
+        selectedDeptIds: [],
+        projectId: 0,
+        hours: 0,
+        mins: 0,
+        description: "",
+      });
       resetTimer();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -158,7 +179,7 @@ export default function TimeEntryPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] });
       setEditId(null);
-      form.reset({ date: todayISO(), organizationId: 0, departmentId: 0, projectId: 0, hours: 0, mins: 0, description: "" });
+      form.reset({ date: todayISO(), organizationId: 0, selectedDeptIds: [], projectId: 0, hours: 0, mins: 0, description: "" });
       resetTimer();
       toast({ title: "Entry updated" });
     },
@@ -175,15 +196,15 @@ export default function TimeEntryPage() {
       toast({ title: "Duration required", description: "Enter at least 1 minute", variant: "destructive" });
       return;
     }
-    if (!vals.organizationId || !vals.departmentId || !vals.projectId) {
-      toast({ title: "Complete all fields", description: "Select org, department, and project", variant: "destructive" });
+    if (!vals.organizationId || vals.selectedDeptIds.length === 0 || !vals.projectId) {
+      toast({ title: "Complete all fields", description: "Select org, at least one department, and a project", variant: "destructive" });
       return;
     }
     const payload = {
       date: vals.date,
       minutes,
       organizationId: Number(vals.organizationId),
-      departmentId: Number(vals.departmentId),
+      departmentIds: vals.selectedDeptIds,
       projectId: Number(vals.projectId),
       description: vals.description || null,
     };
@@ -200,7 +221,7 @@ export default function TimeEntryPage() {
     form.reset({
       date: entry.date,
       organizationId: entry.organizationId,
-      departmentId: entry.departmentId,
+      selectedDeptIds: entry.departmentIds,
       projectId: entry.projectId,
       hours: Math.floor(entry.minutes / 60),
       mins: entry.minutes % 60,
@@ -211,7 +232,7 @@ export default function TimeEntryPage() {
   function cancelEdit() {
     setEditId(null);
     resetTimer();
-    form.reset({ date: todayISO(), organizationId: 0, departmentId: 0, projectId: 0, hours: 0, mins: 0, description: "" });
+    form.reset({ date: todayISO(), organizationId: 0, selectedDeptIds: [], projectId: 0, hours: 0, mins: 0, description: "" });
   }
 
   function orgName(id: number) { return orgs.find(o => o.id === id)?.name ?? "—"; }
@@ -242,67 +263,31 @@ export default function TimeEntryPage() {
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <Clock size={16} className="text-muted-foreground shrink-0" />
-              <span
-                className={cn(
-                  "font-mono text-2xl font-semibold tabular-nums tracking-tight",
-                  timerRunning && "text-primary"
-                )}
-              >
+              <span className={cn("font-mono text-2xl font-semibold tabular-nums tracking-tight", timerRunning && "text-primary")}>
                 {formatElapsed(elapsedSeconds)}
               </span>
-              {timerRunning && (
-                <span className="text-xs text-primary animate-pulse font-medium">RUNNING</span>
-              )}
+              {timerRunning && <span className="text-xs text-primary animate-pulse font-medium">RUNNING</span>}
             </div>
             <div className="flex items-center gap-2">
               {!timerRunning ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={startTimer}
-                  disabled={noSetup}
-                  className="gap-1.5"
-                >
+                <Button type="button" size="sm" variant="outline" onClick={startTimer} disabled={noSetup} className="gap-1.5">
                   <Play size={13} /> Start
                 </Button>
               ) : (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={stopTimer}
-                  className="gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
-                >
+                <Button type="button" size="sm" variant="outline" onClick={stopTimer} className="gap-1.5 border-primary/40 text-primary hover:bg-primary/10">
                   <Square size={13} /> Stop
                 </Button>
               )}
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={useTimerTime}
-                disabled={elapsedSeconds === 0}
-                className="gap-1.5 text-muted-foreground"
-                title="Stop timer and copy elapsed time to duration fields"
-              >
+              <Button type="button" size="sm" variant="ghost" onClick={useTimerTime} disabled={elapsedSeconds === 0} className="gap-1.5 text-muted-foreground" title="Copy elapsed time to duration fields">
                 <TimerReset size={13} /> Use Time
               </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={resetTimer}
-                disabled={elapsedSeconds === 0}
-                className="text-muted-foreground px-2"
-                title="Reset timer"
-              >
+              <Button type="button" size="sm" variant="ghost" onClick={resetTimer} disabled={elapsedSeconds === 0} className="text-muted-foreground px-2" title="Reset timer">
                 ✕
               </Button>
             </div>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            Use the timer to track time live, then click <strong>Use Time</strong> to fill the duration below.
+            Start the timer, then click <strong>Use Time</strong> to copy elapsed time into the duration fields below.
           </p>
         </div>
 
@@ -330,17 +315,8 @@ export default function TimeEntryPage() {
                     onChange={e => {
                       const orgId = Number(e.target.value);
                       field.onChange(orgId);
-                      // Reset downstream selections
-                      form.setValue("departmentId", 0);
+                      form.setValue("selectedDeptIds", []);
                       form.setValue("projectId", 0);
-                      // Auto-select dept if only one in this org
-                      const depts = allDepts.filter(d => d.organizationId === orgId);
-                      if (depts.length === 1) {
-                        form.setValue("departmentId", depts[0].id);
-                        // Auto-select project if only one in that dept
-                        const projs = allProjects.filter(p => p.departmentIds.includes(depts[0].id));
-                        if (projs.length === 1) form.setValue("projectId", projs[0].id);
-                      }
                     }}
                     className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
                     disabled={noSetup}
@@ -352,31 +328,48 @@ export default function TimeEntryPage() {
               </FormItem>
             )} />
 
-            {/* Department */}
-            <FormField control={form.control} name="departmentId" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Department</FormLabel>
-                <FormControl>
-                  <select
-                    data-testid="select-department"
-                    value={field.value}
-                    onChange={e => {
-                      const deptId = Number(e.target.value);
-                      field.onChange(deptId);
-                      // Reset project and auto-select if only one
-                      form.setValue("projectId", 0);
-                      const projs = allProjects.filter(p => p.departmentIds.includes(deptId));
-                      if (projs.length === 1) form.setValue("projectId", projs[0].id);
-                    }}
-                    className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
-                    disabled={!selectedOrgId || filteredDepts.length === 0}
-                  >
-                    <option value={0}>Select department…</option>
-                    {filteredDepts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
-                </FormControl>
-              </FormItem>
-            )} />
+            {/* Departments — checkbox group (multi-select) */}
+            <FormItem>
+              <FormLabel>
+                Department{filteredDepts.length !== 1 ? "s" : ""}
+                {selectedDeptIds.length > 1 && (
+                  <span className="ml-2 text-xs font-normal text-primary">
+                    Time will be split equally across {selectedDeptIds.length} departments
+                  </span>
+                )}
+              </FormLabel>
+              {!selectedOrgId || filteredDepts.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {selectedOrgId ? "No departments in this organization." : "Select an organization first."}
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {filteredDepts.map(d => {
+                    const checked = selectedDeptIds.includes(d.id);
+                    return (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => toggleDept(d.id)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-md border text-sm font-medium transition-colors",
+                          checked
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background text-foreground border-input hover:bg-muted"
+                        )}
+                      >
+                        {d.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {selectedDeptIds.length > 1 && (
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  Only projects assigned to <em>all</em> selected departments are shown below.
+                </p>
+              )}
+            </FormItem>
 
             {/* Project */}
             <FormField control={form.control} name="projectId" render={({ field }) => (
@@ -388,58 +381,36 @@ export default function TimeEntryPage() {
                     value={field.value}
                     onChange={e => field.onChange(Number(e.target.value))}
                     className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
-                    disabled={!selectedDeptId || filteredProjects.length === 0}
+                    disabled={selectedDeptIds.length === 0 || filteredProjects.length === 0}
                   >
                     <option value={0}>Select project…</option>
                     {filteredProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </FormControl>
-                {selectedDeptId > 0 && filteredProjects.length === 0 && (
-                  <p className="text-xs text-muted-foreground">No projects assigned to this department.</p>
+                {selectedDeptIds.length > 0 && filteredProjects.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No projects are assigned to all selected departments.
+                  </p>
                 )}
               </FormItem>
             )} />
 
             {/* Duration */}
             <div>
-              <FormLabel>Duration</FormLabel>
+              <FormLabel>Duration <span className="text-xs font-normal text-muted-foreground">(total — split evenly if multiple depts)</span></FormLabel>
               <div className="flex items-center gap-2 mt-1.5">
-                <Controller
-                  control={form.control}
-                  name="hours"
-                  render={({ field }) => (
-                    <div className="flex items-center gap-1.5">
-                      <Input
-                        data-testid="input-hours"
-                        type="number"
-                        min={0}
-                        max={23}
-                        className="w-20 text-center"
-                        {...field}
-                        onChange={e => field.onChange(Number(e.target.value))}
-                      />
-                      <span className="text-sm text-muted-foreground">h</span>
-                    </div>
-                  )}
-                />
-                <Controller
-                  control={form.control}
-                  name="mins"
-                  render={({ field }) => (
-                    <div className="flex items-center gap-1.5">
-                      <Input
-                        data-testid="input-mins"
-                        type="number"
-                        min={0}
-                        max={59}
-                        className="w-20 text-center"
-                        {...field}
-                        onChange={e => field.onChange(Number(e.target.value))}
-                      />
-                      <span className="text-sm text-muted-foreground">min</span>
-                    </div>
-                  )}
-                />
+                <Controller control={form.control} name="hours" render={({ field }) => (
+                  <div className="flex items-center gap-1.5">
+                    <Input data-testid="input-hours" type="number" min={0} max={23} className="w-20 text-center" {...field} onChange={e => field.onChange(Number(e.target.value))} />
+                    <span className="text-sm text-muted-foreground">h</span>
+                  </div>
+                )} />
+                <Controller control={form.control} name="mins" render={({ field }) => (
+                  <div className="flex items-center gap-1.5">
+                    <Input data-testid="input-mins" type="number" min={0} max={59} className="w-20 text-center" {...field} onChange={e => field.onChange(Number(e.target.value))} />
+                    <span className="text-sm text-muted-foreground">min</span>
+                  </div>
+                )} />
               </div>
             </div>
 
@@ -454,24 +425,11 @@ export default function TimeEntryPage() {
             )} />
 
             <div className="flex gap-2 pt-1">
-              <Button
-                type="submit"
-                data-testid="button-submit-entry"
-                disabled={createMut.isPending || updateMut.isPending || noSetup}
-                className="gap-1.5"
-              >
-                {saved ? (
-                  <><CheckCircle2 size={15} /> Saved</>
-                ) : editId ? (
-                  "Update Entry"
-                ) : (
-                  <><Plus size={15} /> Log Time</>
-                )}
+              <Button type="submit" data-testid="button-submit-entry" disabled={createMut.isPending || updateMut.isPending || noSetup} className="gap-1.5">
+                {saved ? <><CheckCircle2 size={15} /> Saved</> : editId ? "Update Entry" : <><Plus size={15} /> Log Time</>}
               </Button>
               {editId && (
-                <Button variant="outline" onClick={cancelEdit} data-testid="button-cancel-edit">
-                  Cancel
-                </Button>
+                <Button variant="outline" onClick={cancelEdit} data-testid="button-cancel-edit">Cancel</Button>
               )}
             </div>
           </form>
@@ -486,9 +444,7 @@ export default function TimeEntryPage() {
 
         {isLoading ? (
           <div className="space-y-2">
-            {[1,2,3].map(i => (
-              <div key={i} className="h-20 rounded-lg bg-muted animate-pulse" />
-            ))}
+            {[1,2,3].map(i => <div key={i} className="h-20 rounded-lg bg-muted animate-pulse" />)}
           </div>
         ) : entries.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
@@ -501,10 +457,7 @@ export default function TimeEntryPage() {
               <div
                 key={entry.id}
                 data-testid={`card-entry-${entry.id}`}
-                className={cn(
-                  "p-3 rounded-lg border bg-card transition-colors",
-                  editId === entry.id && "border-primary/50 bg-accent/20"
-                )}
+                className={cn("p-3 rounded-lg border bg-card transition-colors", editId === entry.id && "border-primary/50 bg-accent/20")}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
@@ -516,13 +469,19 @@ export default function TimeEntryPage() {
                       <span>{formatDate(entry.date)}</span>
                       <span>·</span>
                       <span className="font-mono">{minutesToHHMM(entry.minutes)}</span>
+                      {entry.departmentIds.length > 1 && (
+                        <>
+                          <span>·</span>
+                          <span className="text-primary font-medium">÷{entry.departmentIds.length} depts</span>
+                        </>
+                      )}
                       <span>·</span>
                       <span className="flex items-center gap-1">
                         <span className="color-dot" style={{ background: orgColor(entry.organizationId) }} />
                         {orgName(entry.organizationId)}
                       </span>
                       <span>·</span>
-                      <span>{deptName(entry.departmentId)}</span>
+                      <span>{entry.departmentIds.map(id => deptName(id)).join(", ")}</span>
                     </div>
                     {entry.description && (
                       <p className="text-xs text-muted-foreground mt-1 truncate">{entry.description}</p>

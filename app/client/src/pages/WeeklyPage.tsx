@@ -58,8 +58,10 @@ export default function WeeklyPage() {
         };
       }
       map[e.projectId].minutes += e.minutes;
-      const dn = deptName(e.departmentId);
-      if (!map[e.projectId].deptNames.includes(dn)) map[e.projectId].deptNames.push(dn);
+      for (const dId of e.departmentIds) {
+        const dn = deptName(dId);
+        if (!map[e.projectId].deptNames.includes(dn)) map[e.projectId].deptNames.push(dn);
+      }
     }
     return Object.values(map).sort((a, b) => b.minutes - a.minutes);
   }, [entries, allDepts, allProjects]);
@@ -159,7 +161,7 @@ export default function WeeklyPage() {
                             <span className="text-sm">{projName(e.projectId)}</span>
                             {e.description && <span className="text-xs text-muted-foreground ml-1.5">— {e.description}</span>}
                           </div>
-                          <span className="text-xs text-muted-foreground">{deptName(e.departmentId)}</span>
+                          <span className="text-xs text-muted-foreground">{e.departmentIds.map(id => deptName(id)).join(", ")}</span>
                           <span className="text-xs font-mono tabular-nums text-muted-foreground">{minutesToHHMM(e.minutes)}</span>
                         </div>
                       ))}

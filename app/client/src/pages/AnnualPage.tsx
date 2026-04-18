@@ -9,6 +9,37 @@ import { minutesToHHMM, minutesToDecimal, getYearRange, formatDate } from "@/lib
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
+// ── Elapsed-period helpers ───────────────────────────────────────────────────
+
+/**
+ * Count the number of elapsed complete + partial weeks between yearStart and
+ * today (inclusive). Always at least 1.
+ */
+function elapsedWeeks(yearStart: string): number {
+  const start = new Date(yearStart + "T00:00:00");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (today < start) return 1;
+  const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+  return Math.max(1, Math.ceil((today.getTime() - start.getTime() + 1) / msPerWeek));
+}
+
+/**
+ * Count the number of elapsed months (complete + partial) between yearStart
+ * and today. Always at least 1.
+ */
+function elapsedMonths(yearStart: string): number {
+  const start = new Date(yearStart + "T00:00:00");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (today < start) return 1;
+  const months =
+    (today.getFullYear() - start.getFullYear()) * 12 +
+    (today.getMonth() - start.getMonth()) +
+    (today.getDate() >= start.getDate() ? 1 : 0);
+  return Math.max(1, months);
+}
+
 export default function AnnualPage() {
   const { data: settings } = useQuery<Settings>({ queryKey: ["/api/settings"] });
   const { data: orgs = [] } = useQuery<Organization[]>({ queryKey: ["/api/organizations"] });
@@ -33,11 +64,15 @@ export default function AnnualPage() {
 
   const totalMinutes = entries.reduce((s, e) => s + e.minutes, 0);
 
+  // Elapsed periods (capped to the year — don't go beyond yearEnd)
+  const weeks  = elapsedWeeks(yearStart);
+  const months = elapsedMonths(yearStart);
+
   // By month (use ISO month of entry date)
   const byMonth = useMemo(() => {
     const map: Record<string, number> = {};
     for (const e of entries) {
-      const mo = e.date.slice(0, 7); // YYYY-MM
+      const mo = e.date.slice(0, 7);
       map[mo] = (map[mo] ?? 0) + e.minutes;
     }
     return map;
@@ -55,7 +90,7 @@ export default function AnnualPage() {
     return list;
   }, [yearStart, yearEnd]);
 
-  // By org
+  // By org — entries count at face value (no split by dept here)
   const byOrg = useMemo(() => {
     const map: Record<number, { name: string; color: string; minutes: number }> = {};
     for (const e of entries) {
@@ -67,30 +102,33 @@ export default function AnnualPage() {
     return Object.values(map).sort((a, b) => b.minutes - a.minutes);
   }, [entries, orgs]);
 
-  // By dept
+  // By dept — split time equally when entry covers multiple departments.
+  // e.g. 60 min across 2 depts → 30 min each.
   const byDept = useMemo(() => {
     const map: Record<number, { name: string; minutes: number; orgName: string }> = {};
     for (const e of entries) {
-      if (!map[e.departmentId]) {
-        map[e.departmentId] = { name: deptName(e.departmentId), minutes: 0, orgName: orgName(e.organizationId) };
+      const deptCount = e.departmentIds.length || 1;
+      const splitMins = e.minutes / deptCount;
+      for (const dId of e.departmentIds) {
+        if (!map[dId]) {
+          map[dId] = { name: deptName(dId), minutes: 0, orgName: orgName(e.organizationId) };
+        }
+        map[dId].minutes += splitMins;
       }
-      map[e.departmentId].minutes += e.minutes;
     }
-    return Object.values(map).sort((a, b) => b.minutes - a.minutes);
+    // Round to nearest minute for display
+    return Object.values(map)
+      .map(d => ({ ...d, minutes: Math.round(d.minutes) }))
+      .sort((a, b) => b.minutes - a.minutes);
   }, [entries, allDepts]);
 
-  // By project
+  // By project — full time (not split)
   const byProject = useMemo(() => {
     const map: Record<number, { name: string; color: string; minutes: number; budgetHours?: number | null }> = {};
     for (const e of entries) {
       if (!map[e.projectId]) {
         const proj = allProjects.find(p => p.id === e.projectId);
-        map[e.projectId] = {
-          name: projName(e.projectId),
-          color: projColor(e.projectId),
-          minutes: 0,
-          budgetHours: proj?.budgetHours,
-        };
+        map[e.projectId] = { name: projName(e.projectId), color: projColor(e.projectId), minutes: 0, budgetHours: proj?.budgetHours };
       }
       map[e.projectId].minutes += e.minutes;
     }
@@ -123,14 +161,18 @@ export default function AnnualPage() {
           <p className="text-xl font-semibold">{entries.length}</p>
         </div>
         <div className="p-4 rounded-lg border bg-card">
-          <p className="text-xs text-muted-foreground mb-1">Projects</p>
-          <p className="text-xl font-semibold">{byProject.length}</p>
+          <p className="text-xs text-muted-foreground mb-1">Avg / Week</p>
+          <p className="text-xl font-semibold font-mono">
+            {minutesToDecimal(Math.round(totalMinutes / weeks))}h
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">over {weeks} wk{weeks !== 1 ? "s" : ""}</p>
         </div>
         <div className="p-4 rounded-lg border bg-card">
           <p className="text-xs text-muted-foreground mb-1">Avg / Month</p>
           <p className="text-xl font-semibold font-mono">
-            {monthList.length > 0 ? minutesToDecimal(Math.round(totalMinutes / monthList.length)) : "0"}h
+            {minutesToDecimal(Math.round(totalMinutes / months))}h
           </p>
+          <p className="text-xs text-muted-foreground mt-0.5">over {months} mo{months !== 1 ? "s" : ""}</p>
         </div>
       </div>
 
@@ -193,10 +235,7 @@ export default function AnnualPage() {
                         <span className="text-sm font-mono tabular-nums">{minutesToDecimal(o.minutes)}h</span>
                       </div>
                       <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all"
-                          style={{ width: `${Math.round((o.minutes / totalMinutes) * 100)}%`, background: o.color }}
-                        />
+                        <div className="h-full rounded-full transition-all" style={{ width: `${Math.round((o.minutes / totalMinutes) * 100)}%`, background: o.color }} />
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">{Math.round((o.minutes / totalMinutes) * 100)}% of total</p>
                     </div>
@@ -205,10 +244,13 @@ export default function AnnualPage() {
               </section>
             )}
 
-            {/* By Department */}
+            {/* By Department — time split equally for multi-dept entries */}
             {byDept.length > 0 && (
               <section>
-                <h2 className="text-sm font-semibold mb-3">By Department</h2>
+                <h2 className="text-sm font-semibold mb-3">
+                  By Department
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">(time split equally for multi-dept entries)</span>
+                </h2>
                 <div className="space-y-2">
                   {byDept.map(d => (
                     <div key={d.name} className="p-3 rounded-lg border bg-card">
@@ -220,10 +262,7 @@ export default function AnnualPage() {
                         <span className="text-sm font-mono tabular-nums">{minutesToDecimal(d.minutes)}h</span>
                       </div>
                       <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-primary/60 rounded-full transition-all"
-                          style={{ width: `${Math.round((d.minutes / totalMinutes) * 100)}%` }}
-                        />
+                        <div className="h-full bg-primary/60 rounded-full transition-all" style={{ width: `${Math.round((d.minutes / totalMinutes) * 100)}%` }} />
                       </div>
                     </div>
                   ))}
@@ -254,18 +293,9 @@ export default function AnnualPage() {
                     </div>
                     <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                       {pct !== null ? (
-                        <div
-                          className={`h-full rounded-full transition-all ${overBudget ? "bg-destructive" : "bg-primary/70"}`}
-                          style={{ width: `${pct}%` }}
-                        />
+                        <div className={`h-full rounded-full transition-all ${overBudget ? "bg-destructive" : "bg-primary/70"}`} style={{ width: `${pct}%` }} />
                       ) : (
-                        <div
-                          className="h-full rounded-full transition-all"
-                          style={{
-                            width: `${Math.round((p.minutes / maxProjectMins) * 100)}%`,
-                            background: p.color,
-                          }}
-                        />
+                        <div className="h-full rounded-full transition-all" style={{ width: `${Math.round((p.minutes / maxProjectMins) * 100)}%`, background: p.color }} />
                       )}
                     </div>
                     {pct !== null && (
