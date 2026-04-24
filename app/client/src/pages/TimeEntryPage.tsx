@@ -57,11 +57,8 @@ export default function TimeEntryPage() {
   // ── Recurring UI state ───────────────────────────────────────────────────────
   const [makeRecurring, setMakeRecurring] = useState(false);
   const [recurFrequency, setRecurFrequency] = useState<RecurringFrequency>("weekly");
-  // Pending payload waiting for past-date confirmation
-  const [pendingRecurPayload, setPendingRecurPayload] = useState<null | {
-    entryPayload: z.infer<typeof insertTimeEntrySchema>;
-    recurPayload: object;
-  }>(null);
+  // Pending payload waiting for past-date confirmation (recurring only)
+  const [pendingRecurPayload, setPendingRecurPayload] = useState<null | { recurPayload: object }>(null);
 
   // ── Timer state ─────────────────────────────────────────────────────────────
   const [timerRunning, setTimerRunning] = useState(false);
@@ -190,6 +187,21 @@ export default function TimeEntryPage() {
       // exist in the DB by the time this callback runs.
       queryClient.invalidateQueries({ queryKey: ["/api/recurring"] });
       queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] });
+      // Reset form and show saved indicator (createMut is NOT called in the
+      // recurring path, so we handle UX feedback here instead).
+      form.reset({
+        date: todayISO(),
+        organizationId: form.getValues("organizationId"),
+        selectedDeptIds: [],
+        projectId: 0,
+        hours: 0,
+        mins: 0,
+        description: "",
+      });
+      resetTimer();
+      setMakeRecurring(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     },
   });
 
@@ -285,13 +297,15 @@ export default function TimeEntryPage() {
       };
 
       // If the start date is in the past, ask the user to confirm before
-      // creating the recurring template (which will back-fill all missed entries)
+      // creating the recurring template (which will back-fill all missed entries).
+      // NOTE: we do NOT call createMut here — runDueRecurrences (called by the
+      // recurring POST route) already inserts a time entry for every due date
+      // including the start date, so calling createMut would produce a duplicate.
       if (payload.date < todayISO()) {
-        setPendingRecurPayload({ entryPayload: payload, recurPayload });
+        setPendingRecurPayload({ recurPayload });
         return; // wait for confirmation
       }
 
-      createMut.mutate(payload);
       createRecurMut.mutate(recurPayload);
     } else {
       createMut.mutate(payload);
@@ -300,9 +314,8 @@ export default function TimeEntryPage() {
 
   function confirmPastDate() {
     if (!pendingRecurPayload) return;
-    const { entryPayload, recurPayload } = pendingRecurPayload;
+    const { recurPayload } = pendingRecurPayload;
     setPendingRecurPayload(null);
-    createMut.mutate(entryPayload);
     createRecurMut.mutate(recurPayload);
   }
 
@@ -589,7 +602,7 @@ export default function TimeEntryPage() {
 
         {/* ── Past-date confirmation dialog ── */}
         {pendingRecurPayload && (() => {
-          const { entryPayload, recurPayload } = pendingRecurPayload;
+          const { recurPayload } = pendingRecurPayload;
           const rp = recurPayload as any;
           const freq: RecurringFrequency = rp.frequency;
           const startDate: string = rp.startDate;
