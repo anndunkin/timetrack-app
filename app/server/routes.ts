@@ -155,6 +155,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // -- On-demand back-fill: fix any time_entries rows where department_ids = '[]' --
+  app.post("/api/db/backfill-depts", (req, res) => {
+    try {
+      const result = storage.backfillDepartmentIds();
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // -- DB diagnostics: return active DB path and row counts --
+  app.get("/api/db/info", (_req, res) => {
+    try {
+      res.json(storage.getDbInfo());
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // -- Save As (copy current DB to new path and switch to it) --
   app.post("/api/files/save-as", async (req, res) => {
     const { path: newPath } = req.body as { path?: string };
