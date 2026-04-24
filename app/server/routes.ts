@@ -151,9 +151,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // -- File switching (called by Electron main process IPC handlers) --
+  // Validate that the path ends with .db and contains no traversal sequences.
+  function isValidDbPath(p: unknown): p is string {
+    if (typeof p !== "string" || !p.trim()) return false;
+    const normalized = p.replace(/\\/g, "/");
+    if (normalized.includes("../") || normalized.includes("./")) return false;
+    if (!p.toLowerCase().endsWith(".db")) return false;
+    return true;
+  }
+
   app.post("/api/files/switch", async (req, res) => {
     const { path: dbPath } = req.body as { path?: string };
     if (!dbPath) return res.status(400).json({ error: "path is required" });
+    if (!isValidDbPath(dbPath)) return res.status(400).json({ error: "Invalid database path" });
     try {
       await switchDb(dbPath);
       res.json({ ok: true, path: dbPath });
@@ -166,6 +176,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/files/save-as", async (req, res) => {
     const { path: newPath } = req.body as { path?: string };
     if (!newPath) return res.status(400).json({ error: "path is required" });
+    if (!isValidDbPath(newPath)) return res.status(400).json({ error: "Invalid database path" });
     try {
       await saveAsDb(newPath);
       res.json({ ok: true, path: newPath });

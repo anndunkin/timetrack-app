@@ -1,7 +1,7 @@
 {
   "name": "timetrack",
   "productName": "TimeTrack",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Desktop time tracking application",
   "main": "main.js",
   "author": "TimeTrack",
@@ -37,14 +37,18 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "build/icon.ico",
       "requestedExecutionLevel": "asInvoker",
       "forceCodeSigning": false,
-      "signingHashAlgorithms": [],
-      "signAndEditExecutable": false
+      "signAndEditExecutable": false,
+      "signtoolOptions": {
+        "signingHashAlgorithms": ["sha256"]
+      }
     },
     "nsis": {
       "oneClick": false,
@@ -60,7 +64,7 @@
     }
   },
   "devDependencies": {
-    "electron": "^33.0.0",
-    "electron-builder": "^25.0.0"
+    "electron": "^36.9.5",
+    "electron-builder": "^26.8.1"
   }
 }

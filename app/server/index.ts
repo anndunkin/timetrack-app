@@ -23,6 +23,19 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+// Security headers — belt-and-suspenders for a localhost-only desktop app.
+// The most important ones: no-sniff, no-framing, and a tight CSP that blocks
+// inline script injection and disallows loading resources from the internet.
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader(
+    "Content-Security-Policy",
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self' data:"
+  );
+  next();
+});
+
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
