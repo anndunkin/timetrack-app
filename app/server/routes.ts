@@ -1,10 +1,11 @@
 import type { Express } from "express";
 import { type Server } from "http";
-import { storage, switchDb, saveAsDb } from "./storage";
+import { storage, switchDb, saveAsDb, runDueRecurrences } from "./storage";
 import {
   insertOrganizationSchema,
   insertDepartmentSchema,
   insertProjectSchema,
+  insertRecurringTaskSchema,
   insertTimeEntrySchema,
   insertSettingsSchema,
 } from "@shared/schema";
@@ -109,6 +110,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const parsed = insertSettingsSchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
     res.json(storage.updateSettings(parsed.data));
+  });
+
+  // -- Recurring tasks --
+  app.get("/api/recurring", (_req, res) => res.json(storage.getRecurringTasks()));
+
+  app.post("/api/recurring", (req, res) => {
+    const parsed = insertRecurringTaskSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    res.status(201).json(storage.createRecurringTask(parsed.data));
+  });
+
+  app.put("/api/recurring/:id", (req, res) => {
+    const partial = insertRecurringTaskSchema.partial().safeParse(req.body);
+    if (!partial.success) return res.status(400).json({ error: partial.error.flatten() });
+    const result = storage.updateRecurringTask(Number(req.params.id), partial.data);
+    result ? res.json(result) : res.status(404).json({ error: "Not found" });
+  });
+
+  app.delete("/api/recurring/:id", (req, res) => {
+    storage.deleteRecurringTask(Number(req.params.id));
+    res.status(204).end();
+  });
+
+  // Run due recurrences on first load (also called from Electron main on launch)
+  app.post("/api/recurring/run", (_req, res) => {
+    try {
+      runDueRecurrences();
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // -- File switching (called by Electron main process IPC handlers) --

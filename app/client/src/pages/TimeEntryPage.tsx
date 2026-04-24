@@ -6,11 +6,12 @@ import { useForm, Controller } from "react-hook-form";
 import {
   type Organization, type Department, type ProjectWithParsedDepts,
   type TimeEntry, insertTimeEntrySchema,
+  type RecurringTask, type RecurringFrequency,
 } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Pencil, Trash2, Clock, Plus, CheckCircle2, Play, Square, TimerReset } from "lucide-react";
+import { Pencil, Trash2, Clock, Plus, CheckCircle2, Play, Square, TimerReset, RefreshCw, Pause } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { cn, minutesToHHMM, formatDate, todayISO } from "@/lib/utils";
@@ -23,11 +24,17 @@ const entrySchema = insertTimeEntrySchema.extend({
 type EntryForm = {
   date: string;
   organizationId: number;
-  selectedDeptIds: number[];   // multi-select departments
+  selectedDeptIds: number[];
   projectId: number;
   hours: number;
   mins: number;
   description: string;
+};
+
+const FREQ_LABELS: Record<RecurringFrequency, string> = {
+  daily: "Daily",
+  weekly: "Weekly",
+  monthly: "Monthly",
 };
 
 // ─── Timer display helper ────────────────────────────────────────────────────
@@ -47,6 +54,10 @@ export default function TimeEntryPage() {
   const [editId, setEditId] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
 
+  // ── Recurring UI state ───────────────────────────────────────────────────────
+  const [makeRecurring, setMakeRecurring] = useState(false);
+  const [recurFrequency, setRecurFrequency] = useState<RecurringFrequency>("weekly");
+
   // ── Timer state ─────────────────────────────────────────────────────────────
   const [timerRunning, setTimerRunning] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -58,6 +69,9 @@ export default function TimeEntryPage() {
   const { data: allDepts = [] } = useQuery<Department[]>({ queryKey: ["/api/departments"] });
   const { data: allProjects = [] } = useQuery<ProjectWithParsedDepts[]>({ queryKey: ["/api/projects"] });
   const { data: entries = [], isLoading } = useQuery<TimeEntry[]>({ queryKey: ["/api/time-entries"] });
+  const { data: recurringTasks = [], isLoading: recurLoading } = useQuery<RecurringTask[]>({
+    queryKey: ["/api/recurring"],
+  });
 
   const form = useForm<EntryForm>({
     defaultValues: {
@@ -74,14 +88,11 @@ export default function TimeEntryPage() {
   const selectedOrgId = Number(form.watch("organizationId"));
   const selectedDeptIds = form.watch("selectedDeptIds") ?? [];
 
-  // Departments filtered by selected org
   const filteredDepts = useMemo(
     () => allDepts.filter(d => d.organizationId === selectedOrgId),
     [allDepts, selectedOrgId]
   );
 
-  // Projects that belong to ALL selected departments (must be in every chosen dept)
-  // If no dept selected yet, show nothing.
   const filteredProjects = useMemo(() => {
     if (selectedDeptIds.length === 0) return [];
     return allProjects.filter(p =>
@@ -89,7 +100,6 @@ export default function TimeEntryPage() {
     );
   }, [allProjects, selectedDeptIds]);
 
-  // Auto-select org on load if only one exists
   useEffect(() => {
     if (orgs.length === 1 && form.getValues("organizationId") === 0) {
       form.setValue("organizationId", orgs[0].id);
@@ -148,11 +158,26 @@ export default function TimeEntryPage() {
       ? current.filter(id => id !== deptId)
       : [...current, deptId];
     form.setValue("selectedDeptIds", next);
-    // Reset project when dept selection changes
     form.setValue("projectId", 0);
   }
 
   // ── Mutations ────────────────────────────────────────────────────────────────
+  const createRecurMut = useMutation({
+    mutationFn: (data: object) => apiRequest("POST", "/api/recurring", data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/recurring"] }),
+  });
+
+  const updateRecurMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: object }) =>
+      apiRequest("PUT", `/api/recurring/${id}`, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/recurring"] }),
+  });
+
+  const deleteRecurMut = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/recurring/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/recurring"] }),
+  });
+
   const createMut = useMutation({
     mutationFn: (data: z.infer<typeof insertTimeEntrySchema>) =>
       apiRequest("POST", "/api/time-entries", data),
@@ -168,6 +193,7 @@ export default function TimeEntryPage() {
         description: "",
       });
       resetTimer();
+      setMakeRecurring(false);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     },
@@ -208,6 +234,20 @@ export default function TimeEntryPage() {
       projectId: Number(vals.projectId),
       description: vals.description || null,
     };
+
+    // If making recurring, save the template too (fire-and-forget alongside the entry)
+    if (makeRecurring && editId === null) {
+      createRecurMut.mutate({
+        organizationId: payload.organizationId,
+        departmentIds: payload.departmentIds,
+        projectId: payload.projectId,
+        description: payload.description,
+        minutes: payload.minutes,
+        frequency: recurFrequency,
+        enabled: 1,
+      });
+    }
+
     if (editId !== null) {
       updateMut.mutate({ id: editId, data: payload });
     } else {
@@ -218,6 +258,7 @@ export default function TimeEntryPage() {
   function startEdit(entry: TimeEntry) {
     setEditId(entry.id);
     resetTimer();
+    setMakeRecurring(false);
     form.reset({
       date: entry.date,
       organizationId: entry.organizationId,
@@ -232,6 +273,7 @@ export default function TimeEntryPage() {
   function cancelEdit() {
     setEditId(null);
     resetTimer();
+    setMakeRecurring(false);
     form.reset({ date: todayISO(), organizationId: 0, selectedDeptIds: [], projectId: 0, hours: 0, mins: 0, description: "" });
   }
 
@@ -328,7 +370,7 @@ export default function TimeEntryPage() {
               </FormItem>
             )} />
 
-            {/* Departments — checkbox group (multi-select) */}
+            {/* Departments */}
             <FormItem>
               <FormLabel>
                 Department{filteredDepts.length !== 1 ? "s" : ""}
@@ -424,6 +466,61 @@ export default function TimeEntryPage() {
               </FormItem>
             )} />
 
+            {/* Make Recurring — only shown on new entries */}
+            {editId === null && (
+              <div className="pt-1 border-t border-border">
+                <div className="flex items-center gap-3 mt-3">
+                  <button
+                    type="button"
+                    onClick={() => setMakeRecurring(v => !v)}
+                    className={cn(
+                      "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
+                      makeRecurring ? "bg-primary" : "bg-input"
+                    )}
+                    role="switch"
+                    aria-checked={makeRecurring}
+                  >
+                    <span
+                      className={cn(
+                        "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform",
+                        makeRecurring ? "translate-x-4" : "translate-x-0"
+                      )}
+                    />
+                  </button>
+                  <span className="text-sm font-medium flex items-center gap-1.5">
+                    <RefreshCw size={13} className="text-muted-foreground" />
+                    Make this a recurring task
+                  </span>
+                </div>
+
+                {makeRecurring && (
+                  <div className="mt-3 ml-12">
+                    <p className="text-xs text-muted-foreground mb-2">Repeat frequency</p>
+                    <div className="flex gap-2">
+                      {(["daily", "weekly", "monthly"] as RecurringFrequency[]).map(f => (
+                        <button
+                          key={f}
+                          type="button"
+                          onClick={() => setRecurFrequency(f)}
+                          className={cn(
+                            "px-3 py-1.5 rounded-md border text-sm font-medium transition-colors",
+                            recurFrequency === f
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-background text-foreground border-input hover:bg-muted"
+                          )}
+                        >
+                          {FREQ_LABELS[f]}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      A time entry with this org, dept, project, duration, and description will be auto-created on each {recurFrequency === "daily" ? "day" : recurFrequency === "weekly" ? "week" : "month"} when the app opens.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex gap-2 pt-1">
               <Button type="submit" data-testid="button-submit-entry" disabled={createMut.isPending || updateMut.isPending || noSetup} className="gap-1.5">
                 {saved ? <><CheckCircle2 size={15} /> Saved</> : editId ? "Update Entry" : <><Plus size={15} /> Log Time</>}
@@ -434,6 +531,90 @@ export default function TimeEntryPage() {
             </div>
           </form>
         </Form>
+
+        {/* ── Recurring Tasks panel ── */}
+        <div className="mt-8">
+          <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
+            <RefreshCw size={15} className="text-muted-foreground" /> Recurring Tasks
+          </h2>
+
+          {recurLoading ? (
+            <div className="space-y-2">
+              {[1, 2].map(i => <div key={i} className="h-14 rounded-lg bg-muted animate-pulse" />)}
+            </div>
+          ) : recurringTasks.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
+              <RefreshCw size={24} className="mx-auto mb-2 opacity-30" />
+              <p className="text-sm">No recurring tasks yet</p>
+              <p className="text-xs mt-1">Toggle "Make this a recurring task" when logging time to create one.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {recurringTasks.map(task => (
+                <div
+                  key={task.id}
+                  className={cn(
+                    "p-3 rounded-lg border bg-card",
+                    task.enabled === 0 && "opacity-60"
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="color-dot" style={{ background: projColor(task.projectId) }} />
+                        <span className="text-sm font-medium truncate">{projName(task.projectId)}</span>
+                        <span className={cn(
+                          "text-xs px-1.5 py-0.5 rounded font-medium",
+                          task.enabled === 1
+                            ? "bg-primary/10 text-primary"
+                            : "bg-muted text-muted-foreground"
+                        )}>
+                          {task.enabled === 1 ? FREQ_LABELS[task.frequency] : "Paused"}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="font-mono">{minutesToHHMM(task.minutes)}</span>
+                        <span>·</span>
+                        <span className="flex items-center gap-1">
+                          <span className="color-dot" style={{ background: orgColor(task.organizationId) }} />
+                          {orgName(task.organizationId)}
+                        </span>
+                        <span>·</span>
+                        <span>{task.departmentIds.map(id => deptName(id)).join(", ")}</span>
+                        {task.lastRun && (
+                          <>
+                            <span>·</span>
+                            <span>Last run {formatDate(task.lastRun)}</span>
+                          </>
+                        )}
+                      </div>
+                      {task.description && (
+                        <p className="text-xs text-muted-foreground mt-1 truncate">{task.description}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {/* Pause / Resume toggle */}
+                      <button
+                        title={task.enabled === 1 ? "Pause recurring task" : "Resume recurring task"}
+                        onClick={() => updateRecurMut.mutate({ id: task.id, data: { enabled: task.enabled === 1 ? 0 : 1 } })}
+                        className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {task.enabled === 1 ? <Pause size={13} /> : <Play size={13} />}
+                      </button>
+                      <button
+                        title="Delete recurring task"
+                        onClick={() => deleteRecurMut.mutate(task.id)}
+                        className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Recent entries ── */}

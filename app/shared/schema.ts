@@ -66,6 +66,33 @@ export const insertTimeEntrySchema = z.object({
 });
 export type InsertTimeEntry = z.infer<typeof insertTimeEntrySchema>;
 
+// ─── Recurring Tasks ──────────────────────────────────────────────────────────
+export type RecurringFrequency = "daily" | "weekly" | "monthly";
+
+export type RecurringTask = {
+  id: number;
+  organizationId: number;
+  departmentIds: number[]; // parsed
+  projectId: number;
+  description: string | null;
+  minutes: number;
+  frequency: RecurringFrequency;
+  /** YYYY-MM-DD of the last time entries were created for this task. Null = never run. */
+  lastRun: string | null;
+  enabled: number; // 1 = active, 0 = paused
+};
+
+export const insertRecurringTaskSchema = z.object({
+  organizationId: z.number().int().positive(),
+  departmentIds: z.array(z.number().int().positive()).min(1),
+  projectId: z.number().int().positive(),
+  description: z.string().optional().nullable(),
+  minutes: z.number().int().positive(),
+  frequency: z.enum(["daily", "weekly", "monthly"]),
+  enabled: z.number().int().min(0).max(1).default(1),
+});
+export type InsertRecurringTask = z.infer<typeof insertRecurringTaskSchema>;
+
 // ─── Settings ─────────────────────────────────────────────────────────────────
 export type Settings = {
   id: number;

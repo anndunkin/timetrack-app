@@ -478,6 +478,8 @@ async function createWindow() {
 
   try {
     await waitForServer(PORT);
+    // Fire any recurring tasks that were missed since the last launch
+    fetch(`http://127.0.0.1:${PORT}/api/recurring/run`, { method: 'POST' }).catch(() => {});
     mainWindow.loadURL(`http://127.0.0.1:${PORT}`);
   } catch (err) {
     dialog.showErrorBox('TimeTrack – Startup Failed', err.message);

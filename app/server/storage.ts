@@ -6,6 +6,8 @@ import {
   type Department, type InsertDepartment,
   type Project, type InsertProject, type ProjectWithParsedDepts,
   type TimeEntry, type InsertTimeEntry,
+  type RecurringTask, type InsertRecurringTask,
+  type RecurringFrequency,
   type Settings, type InsertSettings,
 } from "@shared/schema";
 
@@ -178,6 +180,21 @@ function runMigrations(): void {
     );
   `);
 
+  // Migration: recurring_tasks table
+  db.run(`
+    CREATE TABLE IF NOT EXISTS recurring_tasks (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      organization_id INTEGER NOT NULL,
+      department_ids  TEXT    NOT NULL DEFAULT '[]',
+      project_id      INTEGER NOT NULL,
+      description     TEXT,
+      minutes         INTEGER NOT NULL,
+      frequency       TEXT    NOT NULL DEFAULT 'weekly',
+      last_run        TEXT,
+      enabled         INTEGER NOT NULL DEFAULT 1
+    );
+  `);
+
   // Migration: add department_ids column to time_entries if it doesn't exist.
   // Existing rows get a JSON array containing their single department_id value,
   // so no data is lost and all old entries continue to work correctly.
@@ -245,6 +262,26 @@ function mapTimeEntry(r: Record<string, unknown>): TimeEntry {
   };
 }
 
+function mapRecurring(r: Record<string, unknown>): RecurringTask {
+  let departmentIds: number[];
+  try {
+    departmentIds = JSON.parse(r.department_ids as string) as number[];
+  } catch {
+    departmentIds = [];
+  }
+  return {
+    id: r.id as number,
+    organizationId: r.organization_id as number,
+    departmentIds,
+    projectId: r.project_id as number,
+    description: r.description as string | null,
+    minutes: r.minutes as number,
+    frequency: r.frequency as RecurringFrequency,
+    lastRun: r.last_run as string | null,
+    enabled: r.enabled as number,
+  };
+}
+
 function mapSettings(r: Record<string, unknown>): Settings {
   return {
     id: r.id as number,
@@ -260,6 +297,12 @@ function parseProject(p: Project): ProjectWithParsedDepts {
 // ─── IStorage interface ────────────────────────────────────────────────────────
 
 export interface IStorage {
+  // Recurring tasks
+  getRecurringTasks(): RecurringTask[];
+  createRecurringTask(data: InsertRecurringTask): RecurringTask;
+  updateRecurringTask(id: number, data: Partial<InsertRecurringTask>): RecurringTask | undefined;
+  deleteRecurringTask(id: number): void;
+
   getOrganizations(): Organization[];
   createOrganization(data: InsertOrganization): Organization;
   updateOrganization(id: number, data: InsertOrganization): Organization | undefined;
@@ -289,7 +332,114 @@ export interface IStorage {
 
 // ─── Storage implementation ───────────────────────────────────────────────────
 
+/**
+ * Walk through all enabled recurring tasks, compute which dates have been
+ * missed since last_run, and insert a time entry for each one.
+ * Called on every app launch.
+ */
+export function runDueRecurrences(): void {
+  const tasks = storage.getRecurringTasks().filter(t => t.enabled === 1);
+  const today = localDateStr();
+
+  for (const task of tasks) {
+    const dueDates = getMissedDates(task.frequency, task.lastRun, today);
+    if (dueDates.length === 0) continue;
+
+    for (const date of dueDates) {
+      const primaryDept = task.departmentIds[0];
+      const deptIdsJson = JSON.stringify(task.departmentIds);
+      db.run(
+        "INSERT INTO time_entries (date, minutes, organization_id, department_id, department_ids, project_id, description) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [date, task.minutes, task.organizationId, primaryDept, deptIdsJson, task.projectId, task.description ?? null],
+      );
+    }
+
+    db.run("UPDATE recurring_tasks SET last_run = ? WHERE id = ?", [today, task.id]);
+    flushSync();
+  }
+}
+
+/** Return YYYY-MM-DD string for today using local time (avoids UTC offset issues). */
+function localDateStr(): string {
+  const d = new Date();
+  return [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, "0"),
+    String(d.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+/**
+ * Compute all dates that should have fired for `frequency` between
+ * `lastRun` (exclusive) and `today` (inclusive).
+ */
+function getMissedDates(frequency: RecurringFrequency, lastRun: string | null, today: string): string[] {
+  const dates: string[] = [];
+  const toMs = (s: string) => new Date(s + "T00:00:00").getTime();
+  const todayMs = toMs(today);
+
+  // If never run before, just fire once for today
+  if (!lastRun) return [today];
+
+  const lastMs = toMs(lastRun);
+  if (lastMs >= todayMs) return []; // already ran today or in the future
+
+  const cursor = new Date(lastMs);
+
+  while (true) {
+    // Advance cursor by one period
+    if (frequency === "daily") {
+      cursor.setDate(cursor.getDate() + 1);
+    } else if (frequency === "weekly") {
+      cursor.setDate(cursor.getDate() + 7);
+    } else {
+      // monthly: same day next month (clamps to last day of month automatically)
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+    if (cursor.getTime() > todayMs) break;
+    dates.push([
+      cursor.getFullYear(),
+      String(cursor.getMonth() + 1).padStart(2, "0"),
+      String(cursor.getDate()).padStart(2, "0"),
+    ].join("-"));
+  }
+
+  return dates;
+}
+
 export const storage: IStorage = {
+  // --- Recurring Tasks ---
+  getRecurringTasks() {
+    return all<Record<string, unknown>>("SELECT * FROM recurring_tasks ORDER BY id").map(mapRecurring);
+  },
+  createRecurringTask(data) {
+    const id = run(
+      "INSERT INTO recurring_tasks (organization_id, department_ids, project_id, description, minutes, frequency, enabled) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [data.organizationId, JSON.stringify(data.departmentIds), data.projectId, data.description ?? null, data.minutes, data.frequency, data.enabled ?? 1],
+    );
+    return mapRecurring(first<Record<string, unknown>>("SELECT * FROM recurring_tasks WHERE id = ?", [id])!);
+  },
+  updateRecurringTask(id, data) {
+    const existing = first<Record<string, unknown>>("SELECT * FROM recurring_tasks WHERE id = ?", [id]);
+    if (!existing) return undefined;
+    const merged = mapRecurring(existing);
+    const orgId   = data.organizationId   ?? merged.organizationId;
+    const deptIds = data.departmentIds     ?? merged.departmentIds;
+    const projId  = data.projectId         ?? merged.projectId;
+    const desc    = data.description !== undefined ? data.description : merged.description;
+    const mins    = data.minutes            ?? merged.minutes;
+    const freq    = data.frequency          ?? merged.frequency;
+    const enabled = data.enabled            ?? merged.enabled;
+    run(
+      "UPDATE recurring_tasks SET organization_id=?, department_ids=?, project_id=?, description=?, minutes=?, frequency=?, enabled=? WHERE id=?",
+      [orgId, JSON.stringify(deptIds), projId, desc ?? null, mins, freq, enabled, id],
+    );
+    return mapRecurring(first<Record<string, unknown>>("SELECT * FROM recurring_tasks WHERE id = ?", [id])!);
+  },
+  deleteRecurringTask(id) {
+    run("DELETE FROM recurring_tasks WHERE id = ?", [id]);
+  },
+
   // --- Organizations ---
   getOrganizations() {
     return all<Record<string, unknown>>("SELECT * FROM organizations").map(mapOrg);
