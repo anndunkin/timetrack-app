@@ -196,11 +196,13 @@ function runMigrations(): void {
     );
   `);
 
-  // Migration: add start_date column to recurring_tasks if it doesn't exist
+  // Migration: add start_date column to recurring_tasks if it doesn't exist.
+  // NOTE: ALTER TABLE ADD COLUMN only accepts constant literals as DEFAULT,
+  // not expressions like date('now'). We use '' and normalise in the mapper.
   const recurCols = db.exec("PRAGMA table_info(recurring_tasks)");
   const recurColNames = recurCols[0]?.values.map((r) => r[1] as string) ?? [];
   if (!recurColNames.includes("start_date")) {
-    db.run("ALTER TABLE recurring_tasks ADD COLUMN start_date TEXT NOT NULL DEFAULT (date('now'))");
+    db.run("ALTER TABLE recurring_tasks ADD COLUMN start_date TEXT NOT NULL DEFAULT ''");
     flushSync();
   }
 
@@ -286,7 +288,7 @@ function mapRecurring(r: Record<string, unknown>): RecurringTask {
     description: r.description as string | null,
     minutes: r.minutes as number,
     frequency: r.frequency as RecurringFrequency,
-    startDate: (r.start_date as string) ?? localDateStr(),
+    startDate: (r.start_date as string) || localDateStr(),
     lastRun: r.last_run as string | null,
     enabled: r.enabled as number,
   };
