@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { type TimeEntry, type Organization, type Department, type ProjectWithParsedDepts } from "@shared/schema";
-import { AlertTriangle, Trash2, Database, ShieldAlert, Wrench } from "lucide-react";
+import { AlertTriangle, Trash2, Database, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDate, minutesToHHMM } from "@/lib/utils";
 import {
@@ -25,28 +25,6 @@ export default function DatabasePage() {
 
   // ID of the entry pending deletion confirmation
   const [deleteId, setDeleteId] = useState<number | null>(null);
-
-  // DB info (path + empty-dept-ids count)
-  const { data: dbInfo } = useQuery<{ dbPath: string; totalEntries: number; emptyDeptIds: number }>({
-    queryKey: ["/api/db/info"],
-    enabled: warningAcknowledged,
-    refetchInterval: false,
-  });
-
-  const backfillMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/db/backfill-depts"),
-    onSuccess: (result: any) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/db/info"] });
-      toast({
-        title: result.fixed > 0 ? `Repaired ${result.fixed} entries` : "Nothing to repair",
-        description: result.fixed > 0
-          ? `${result.fixed} entries now have correct department data. ${result.remaining} still empty (may have null dept).`
-          : "All entries already have department data populated.",
-      });
-    },
-    onError: () => toast({ title: "Repair failed", variant: "destructive" }),
-  });
 
   const { data: entries = [], isLoading } = useQuery<TimeEntry[]>({
     queryKey: ["/api/time-entries"],
@@ -128,7 +106,7 @@ export default function DatabasePage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex items-start justify-between mb-6">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <Database size={18} className="text-muted-foreground" />
@@ -137,41 +115,12 @@ export default function DatabasePage() {
           <p className="text-sm text-muted-foreground">
             Raw view of all time entries. Use with caution — deletions are permanent.
           </p>
-          {dbInfo && (
-            <p className="text-xs text-muted-foreground mt-1 font-mono truncate max-w-lg">{dbInfo.dbPath}</p>
-          )}
         </div>
         <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md bg-destructive/10 text-destructive border border-destructive/20">
           <AlertTriangle size={12} />
           Direct access
         </span>
       </div>
-
-      {/* Repair banner — shown when there are unfixed entries */}
-      {dbInfo && dbInfo.emptyDeptIds > 0 && (
-        <div className="flex items-center justify-between gap-4 mb-4 px-4 py-3 rounded-lg border border-blue-400/40 bg-blue-50/50 dark:bg-blue-900/10 text-sm">
-          <div className="flex items-center gap-2 text-blue-800 dark:text-blue-300">
-            <Wrench size={15} className="shrink-0" />
-            <span><strong>{dbInfo.emptyDeptIds}</strong> entries have empty department data and need repair.</span>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="shrink-0 border-blue-400/60 text-blue-800 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30"
-            onClick={() => backfillMutation.mutate()}
-            disabled={backfillMutation.isPending}
-            data-testid="button-repair-depts"
-          >
-            {backfillMutation.isPending ? "Repairing…" : "Repair now"}
-          </Button>
-        </div>
-      )}
-      {dbInfo && dbInfo.emptyDeptIds === 0 && dbInfo.totalEntries > 0 && (
-        <div className="flex items-center gap-2 mb-4 px-4 py-2.5 rounded-lg border border-green-400/40 bg-green-50/50 dark:bg-green-900/10 text-sm text-green-800 dark:text-green-300">
-          <span>✓</span>
-          <span>All {dbInfo.totalEntries} entries have correct department data.</span>
-        </div>
-      )}
 
       {/* Warning banner (persistent reminder) */}
       <div className="flex items-center gap-3 mb-5 px-4 py-3 rounded-lg border border-amber-400/40 bg-amber-50/50 dark:bg-amber-900/10 text-sm text-amber-800 dark:text-amber-300">

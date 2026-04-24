@@ -118,14 +118,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/recurring", (req, res) => {
     const parsed = insertRecurringTaskSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-    res.status(201).json(storage.createRecurringTask(parsed.data));
+    const task = storage.createRecurringTask(parsed.data);
+    // Fire immediately so back-dated entries are created right away,
+    // without requiring a restart.
+    try { runDueRecurrences(); } catch (_) {}
+    res.status(201).json(task);
   });
 
   app.put("/api/recurring/:id", (req, res) => {
     const partial = insertRecurringTaskSchema.partial().safeParse(req.body);
     if (!partial.success) return res.status(400).json({ error: partial.error.flatten() });
     const result = storage.updateRecurringTask(Number(req.params.id), partial.data);
-    result ? res.json(result) : res.status(404).json({ error: "Not found" });
+    if (!result) return res.status(404).json({ error: "Not found" });
+    // Re-run in case start_date or frequency changed.
+    try { runDueRecurrences(); } catch (_) {}
+    res.json(result);
   });
 
   app.delete("/api/recurring/:id", (req, res) => {
@@ -152,25 +159,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({ ok: true, path: dbPath });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to switch database" });
-    }
-  });
-
-  // -- On-demand back-fill: fix any time_entries rows where department_ids = '[]' --
-  app.post("/api/db/backfill-depts", (req, res) => {
-    try {
-      const result = storage.backfillDepartmentIds();
-      res.json(result);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  // -- DB diagnostics: return active DB path and row counts --
-  app.get("/api/db/info", (_req, res) => {
-    try {
-      res.json(storage.getDbInfo());
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
     }
   });
 

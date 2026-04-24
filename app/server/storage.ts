@@ -314,8 +314,6 @@ function parseProject(p: Project): ProjectWithParsedDepts {
 // ─── IStorage interface ────────────────────────────────────────────────────────
 
 export interface IStorage {
-  backfillDepartmentIds(): { fixed: number; remaining: number };
-  getDbInfo(): { dbPath: string; totalEntries: number; emptyDeptIds: number };
   // Recurring tasks
   getRecurringTasks(): RecurringTask[];
   createRecurringTask(data: InsertRecurringTask): RecurringTask;
@@ -449,20 +447,6 @@ function getMissedDates(
 }
 
 export const storage: IStorage = {
-  // --- Back-fill / diagnostics ---
-  backfillDepartmentIds() {
-    const before = (all<{ n: number }>("SELECT COUNT(*) AS n FROM time_entries WHERE department_ids = '[]'")[0]?.n ?? 0) as number;
-    db.run("UPDATE time_entries SET department_ids = json_array(department_id) WHERE department_ids = '[]' AND department_id IS NOT NULL");
-    scheduleSave();
-    const after = (all<{ n: number }>("SELECT COUNT(*) AS n FROM time_entries WHERE department_ids = '[]'")[0]?.n ?? 0) as number;
-    return { fixed: Number(before) - Number(after), remaining: Number(after) };
-  },
-  getDbInfo() {
-    const total = (all<{ n: number }>("SELECT COUNT(*) AS n FROM time_entries")[0]?.n ?? 0) as number;
-    const empty = (all<{ n: number }>("SELECT COUNT(*) AS n FROM time_entries WHERE department_ids = '[]'")[0]?.n ?? 0) as number;
-    return { dbPath: DB_PATH, totalEntries: Number(total), emptyDeptIds: Number(empty) };
-  },
-
   // --- Recurring Tasks ---
   getRecurringTasks() {
     return all<Record<string, unknown>>("SELECT * FROM recurring_tasks ORDER BY id").map(mapRecurring);

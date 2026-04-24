@@ -184,18 +184,30 @@ export default function TimeEntryPage() {
   // ── Mutations ────────────────────────────────────────────────────────────────
   const createRecurMut = useMutation({
     mutationFn: (data: object) => apiRequest("POST", "/api/recurring", data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/recurring"] }),
+    onSuccess: () => {
+      // Invalidate both the recurring list AND time-entries — the server fires
+      // runDueRecurrences immediately on create, so new back-filled entries
+      // exist in the DB by the time this callback runs.
+      queryClient.invalidateQueries({ queryKey: ["/api/recurring"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] });
+    },
   });
 
   const updateRecurMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: object }) =>
       apiRequest("PUT", `/api/recurring/${id}`, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/recurring"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/recurring"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] });
+    },
   });
 
   const deleteRecurMut = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/recurring/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/recurring"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/recurring"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] });
+    },
   });
 
   const createMut = useMutation({
