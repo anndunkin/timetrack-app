@@ -190,10 +190,19 @@ function runMigrations(): void {
       description     TEXT,
       minutes         INTEGER NOT NULL,
       frequency       TEXT    NOT NULL DEFAULT 'weekly',
+      start_date      TEXT    NOT NULL DEFAULT (date('now')),
       last_run        TEXT,
       enabled         INTEGER NOT NULL DEFAULT 1
     );
   `);
+
+  // Migration: add start_date column to recurring_tasks if it doesn't exist
+  const recurCols = db.exec("PRAGMA table_info(recurring_tasks)");
+  const recurColNames = recurCols[0]?.values.map((r) => r[1] as string) ?? [];
+  if (!recurColNames.includes("start_date")) {
+    db.run("ALTER TABLE recurring_tasks ADD COLUMN start_date TEXT NOT NULL DEFAULT (date('now'))");
+    flushSync();
+  }
 
   // Migration: add department_ids column to time_entries if it doesn't exist.
   // Existing rows get a JSON array containing their single department_id value,
@@ -277,6 +286,7 @@ function mapRecurring(r: Record<string, unknown>): RecurringTask {
     description: r.description as string | null,
     minutes: r.minutes as number,
     frequency: r.frequency as RecurringFrequency,
+    startDate: (r.start_date as string) ?? localDateStr(),
     lastRun: r.last_run as string | null,
     enabled: r.enabled as number,
   };
@@ -342,7 +352,11 @@ export function runDueRecurrences(): void {
   const today = localDateStr();
 
   for (const task of tasks) {
-    const dueDates = getMissedDates(task.frequency, task.lastRun, today);
+    // Use start_date as the anchor: if never run before, generate dates from
+    // start_date (inclusive) up to today. If already run, generate from lastRun
+    // (exclusive) up to today — but never before start_date.
+    const anchor = task.lastRun ?? beforeDate(task.startDate, task.frequency);
+    const dueDates = getMissedDates(task.frequency, anchor, today, task.startDate);
     if (dueDates.length === 0) continue;
 
     for (const date of dueDates) {
@@ -359,6 +373,22 @@ export function runDueRecurrences(): void {
   }
 }
 
+/**
+ * Return a fake "previous period" date just before startDate so that
+ * getMissedDates will include startDate itself as the first due date.
+ */
+function beforeDate(startDate: string, frequency: RecurringFrequency): string {
+  const d = new Date(startDate + "T00:00:00");
+  if (frequency === "daily") d.setDate(d.getDate() - 1);
+  else if (frequency === "weekly") d.setDate(d.getDate() - 7);
+  else d.setMonth(d.getMonth() - 1);
+  return [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, "0"),
+    String(d.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
 /** Return YYYY-MM-DD string for today using local time (avoids UTC offset issues). */
 function localDateStr(): string {
   const d = new Date();
@@ -371,32 +401,34 @@ function localDateStr(): string {
 
 /**
  * Compute all dates that should have fired for `frequency` between
- * `lastRun` (exclusive) and `today` (inclusive).
+ * `lastRun` (exclusive) and `today` (inclusive), but never before `minDate`.
  */
-function getMissedDates(frequency: RecurringFrequency, lastRun: string | null, today: string): string[] {
+function getMissedDates(
+  frequency: RecurringFrequency,
+  lastRun: string,
+  today: string,
+  minDate?: string,
+): string[] {
   const dates: string[] = [];
   const toMs = (s: string) => new Date(s + "T00:00:00").getTime();
   const todayMs = toMs(today);
-
-  // If never run before, just fire once for today
-  if (!lastRun) return [today];
+  const minMs   = minDate ? toMs(minDate) : 0;
 
   const lastMs = toMs(lastRun);
-  if (lastMs >= todayMs) return []; // already ran today or in the future
+  if (lastMs >= todayMs) return [];
 
   const cursor = new Date(lastMs);
 
   while (true) {
-    // Advance cursor by one period
     if (frequency === "daily") {
       cursor.setDate(cursor.getDate() + 1);
     } else if (frequency === "weekly") {
       cursor.setDate(cursor.getDate() + 7);
     } else {
-      // monthly: same day next month (clamps to last day of month automatically)
       cursor.setMonth(cursor.getMonth() + 1);
     }
     if (cursor.getTime() > todayMs) break;
+    if (cursor.getTime() < minMs) continue; // skip dates before startDate
     dates.push([
       cursor.getFullYear(),
       String(cursor.getMonth() + 1).padStart(2, "0"),
@@ -414,8 +446,8 @@ export const storage: IStorage = {
   },
   createRecurringTask(data) {
     const id = run(
-      "INSERT INTO recurring_tasks (organization_id, department_ids, project_id, description, minutes, frequency, enabled) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [data.organizationId, JSON.stringify(data.departmentIds), data.projectId, data.description ?? null, data.minutes, data.frequency, data.enabled ?? 1],
+      "INSERT INTO recurring_tasks (organization_id, department_ids, project_id, description, minutes, frequency, start_date, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [data.organizationId, JSON.stringify(data.departmentIds), data.projectId, data.description ?? null, data.minutes, data.frequency, data.startDate, data.enabled ?? 1],
     );
     return mapRecurring(first<Record<string, unknown>>("SELECT * FROM recurring_tasks WHERE id = ?", [id])!);
   },
@@ -423,16 +455,17 @@ export const storage: IStorage = {
     const existing = first<Record<string, unknown>>("SELECT * FROM recurring_tasks WHERE id = ?", [id]);
     if (!existing) return undefined;
     const merged = mapRecurring(existing);
-    const orgId   = data.organizationId   ?? merged.organizationId;
-    const deptIds = data.departmentIds     ?? merged.departmentIds;
-    const projId  = data.projectId         ?? merged.projectId;
-    const desc    = data.description !== undefined ? data.description : merged.description;
-    const mins    = data.minutes            ?? merged.minutes;
-    const freq    = data.frequency          ?? merged.frequency;
-    const enabled = data.enabled            ?? merged.enabled;
+    const orgId     = data.organizationId   ?? merged.organizationId;
+    const deptIds   = data.departmentIds     ?? merged.departmentIds;
+    const projId    = data.projectId         ?? merged.projectId;
+    const desc      = data.description !== undefined ? data.description : merged.description;
+    const mins      = data.minutes            ?? merged.minutes;
+    const freq      = data.frequency          ?? merged.frequency;
+    const startDate = data.startDate          ?? merged.startDate;
+    const enabled   = data.enabled            ?? merged.enabled;
     run(
-      "UPDATE recurring_tasks SET organization_id=?, department_ids=?, project_id=?, description=?, minutes=?, frequency=?, enabled=? WHERE id=?",
-      [orgId, JSON.stringify(deptIds), projId, desc ?? null, mins, freq, enabled, id],
+      "UPDATE recurring_tasks SET organization_id=?, department_ids=?, project_id=?, description=?, minutes=?, frequency=?, start_date=?, enabled=? WHERE id=?",
+      [orgId, JSON.stringify(deptIds), projId, desc ?? null, mins, freq, startDate, enabled, id],
     );
     return mapRecurring(first<Record<string, unknown>>("SELECT * FROM recurring_tasks WHERE id = ?", [id])!);
   },

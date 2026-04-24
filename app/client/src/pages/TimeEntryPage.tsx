@@ -57,6 +57,11 @@ export default function TimeEntryPage() {
   // ── Recurring UI state ───────────────────────────────────────────────────────
   const [makeRecurring, setMakeRecurring] = useState(false);
   const [recurFrequency, setRecurFrequency] = useState<RecurringFrequency>("weekly");
+  // Pending payload waiting for past-date confirmation
+  const [pendingRecurPayload, setPendingRecurPayload] = useState<null | {
+    entryPayload: z.infer<typeof insertTimeEntrySchema>;
+    recurPayload: object;
+  }>(null);
 
   // ── Timer state ─────────────────────────────────────────────────────────────
   const [timerRunning, setTimerRunning] = useState(false);
@@ -235,24 +240,47 @@ export default function TimeEntryPage() {
       description: vals.description || null,
     };
 
-    // If making recurring, save the template too (fire-and-forget alongside the entry)
-    if (makeRecurring && editId === null) {
-      createRecurMut.mutate({
+    if (editId !== null) {
+      updateMut.mutate({ id: editId, data: payload });
+      return;
+    }
+
+    if (makeRecurring) {
+      const recurPayload = {
         organizationId: payload.organizationId,
         departmentIds: payload.departmentIds,
         projectId: payload.projectId,
         description: payload.description,
         minutes: payload.minutes,
         frequency: recurFrequency,
+        startDate: payload.date,
         enabled: 1,
-      });
-    }
+      };
 
-    if (editId !== null) {
-      updateMut.mutate({ id: editId, data: payload });
+      // If the start date is in the past, ask the user to confirm before
+      // creating the recurring template (which will back-fill all missed entries)
+      if (payload.date < todayISO()) {
+        setPendingRecurPayload({ entryPayload: payload, recurPayload });
+        return; // wait for confirmation
+      }
+
+      createMut.mutate(payload);
+      createRecurMut.mutate(recurPayload);
     } else {
       createMut.mutate(payload);
     }
+  }
+
+  function confirmPastDate() {
+    if (!pendingRecurPayload) return;
+    const { entryPayload, recurPayload } = pendingRecurPayload;
+    setPendingRecurPayload(null);
+    createMut.mutate(entryPayload);
+    createRecurMut.mutate(recurPayload);
+  }
+
+  function cancelPastDate() {
+    setPendingRecurPayload(null);
   }
 
   function startEdit(entry: TimeEntry) {
@@ -532,6 +560,50 @@ export default function TimeEntryPage() {
           </form>
         </Form>
 
+        {/* ── Past-date confirmation dialog ── */}
+        {pendingRecurPayload && (() => {
+          const { entryPayload, recurPayload } = pendingRecurPayload;
+          const rp = recurPayload as any;
+          const freq: RecurringFrequency = rp.frequency;
+          const startDate: string = rp.startDate;
+          // Calculate how many back-filled entries will be created
+          function countMissed(f: RecurringFrequency, start: string): number {
+            const today = todayISO();
+            if (start >= today) return 0;
+            const toMs = (s: string) => new Date(s + "T00:00:00").getTime();
+            const startMs = toMs(start);
+            const todayMs = toMs(today);
+            const cursor = new Date(startMs);
+            let count = 1; // start date itself
+            while (true) {
+              if (f === "daily") cursor.setDate(cursor.getDate() + 1);
+              else if (f === "weekly") cursor.setDate(cursor.getDate() + 7);
+              else cursor.setMonth(cursor.getMonth() + 1);
+              if (cursor.getTime() > todayMs) break;
+              count++;
+            }
+            return count;
+          }
+          const missed = countMissed(freq, startDate);
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+              <div className="bg-card border rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
+                <h3 className="text-base font-semibold mb-2">Start date is in the past</h3>
+                <p className="text-sm text-muted-foreground mb-1">
+                  You selected <strong>{formatDate(startDate)}</strong> as the start date for a <strong>{FREQ_LABELS[freq]}</strong> recurring task.
+                </p>
+                <p className="text-sm text-muted-foreground mb-4">
+                  This will create <strong>{missed} time {missed === 1 ? "entry" : "entries"}</strong> — one for each {freq === "daily" ? "day" : freq === "weekly" ? "week" : "month"} from that date through today.
+                </p>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" size="sm" onClick={cancelPastDate}>Cancel</Button>
+                  <Button size="sm" onClick={confirmPastDate}>Yes, create {missed} {missed === 1 ? "entry" : "entries"}</Button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* ── Recurring Tasks panel ── */}
         <div className="mt-8">
           <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
@@ -581,6 +653,8 @@ export default function TimeEntryPage() {
                         </span>
                         <span>·</span>
                         <span>{task.departmentIds.map(id => deptName(id)).join(", ")}</span>
+                        <span>·</span>
+                        <span>Started {formatDate(task.startDate)}</span>
                         {task.lastRun && (
                           <>
                             <span>·</span>

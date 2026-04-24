@@ -77,6 +77,8 @@ export type RecurringTask = {
   description: string | null;
   minutes: number;
   frequency: RecurringFrequency;
+  /** YYYY-MM-DD the user chose as the start date for this recurring task. */
+  startDate: string;
   /** YYYY-MM-DD of the last time entries were created for this task. Null = never run. */
   lastRun: string | null;
   enabled: number; // 1 = active, 0 = paused
@@ -89,6 +91,7 @@ export const insertRecurringTaskSchema = z.object({
   description: z.string().optional().nullable(),
   minutes: z.number().int().positive(),
   frequency: z.enum(["daily", "weekly", "monthly"]),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "startDate must be YYYY-MM-DD"),
   enabled: z.number().int().min(0).max(1).default(1),
 });
 export type InsertRecurringTask = z.infer<typeof insertRecurringTaskSchema>;
