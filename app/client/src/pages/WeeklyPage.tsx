@@ -7,13 +7,17 @@ import {
 import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  minutesToHHMM, minutesToDecimal, getWeekRange, isoWeekDays, DAY_NAMES, formatDate,
+  minutesToHHMM, minutesToDecimal, getWeekRange, isoWeekDays, DAY_NAMES, formatDate, todayISO,
 } from "@/lib/utils";
 
 function addDays(iso: string, n: number): string {
   const d = new Date(iso + "T00:00:00");
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  // Use local date parts to avoid UTC offset shifting the date
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const dy = String(d.getDate()).padStart(2, "0");
+  return `${y}-${mo}-${dy}`;
 }
 
 export default function WeeklyPage() {
@@ -124,7 +128,7 @@ export default function WeeklyPage() {
             {weekDays.map((day, idx) => {
               const dayEntries = byDay[day];
               const dayMins = dayEntries.reduce((s, e) => s + e.minutes, 0);
-              const isToday = day === new Date().toISOString().slice(0, 10);
+              const isToday = day === todayISO();
               const barWidth = dayMins > 0 ? Math.round((dayMins / maxDayMins) * 100) : 0;
 
               return (
@@ -177,7 +181,7 @@ export default function WeeklyPage() {
             <h2 className="text-sm font-semibold mb-3">By Project</h2>
             <div className="space-y-2">
               {byProject.map(p => (
-                <div key={p.name} className="p-3 rounded-lg border bg-card">
+                <div key={`${p.name}-${p.color}`} className="p-3 rounded-lg border bg-card">
                   <div className="flex items-center gap-2 mb-1.5">
                     <span className="color-dot" style={{ background: p.color }} />
                     <span className="text-sm font-medium flex-1 truncate">{p.name}</span>

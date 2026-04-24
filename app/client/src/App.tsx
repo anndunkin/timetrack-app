@@ -10,6 +10,7 @@ import WeeklyPage from "./pages/WeeklyPage";
 import AnnualPage from "./pages/AnnualPage";
 import AdminPage from "./pages/AdminPage";
 import SettingsPage from "./pages/SettingsPage";
+import DatabasePage from "./pages/DatabasePage";
 import NotFound from "./pages/not-found";
 
 export default function App() {
@@ -24,6 +25,7 @@ export default function App() {
               <Route path="/annual" component={AnnualPage} />
               <Route path="/admin" component={AdminPage} />
               <Route path="/settings" component={SettingsPage} />
+              <Route path="/database" component={DatabasePage} />
               <Route component={NotFound} />
             </Switch>
           </Layout>
