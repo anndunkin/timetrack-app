@@ -104,6 +104,14 @@ function buildMenu() {
     },
   });
 
+  fileItems.push({
+    label: 'Save As…',
+    accelerator: 'CmdOrCtrl+Shift+S',
+    click: async () => {
+      await doSaveAs();
+    },
+  });
+
   fileItems.push({ type: 'separator' });
 
   fileItems.push({
@@ -248,6 +256,74 @@ async function doOpenFile() {
 }
 
 /**
+ * Save a copy of the current database to a user-chosen path, then switch to it.
+ * The Save dialog opens pre-seeded in the current file's folder with its name,
+ * so the user only needs to change what they want to change.
+ */
+async function doSaveAs() {
+  if (!mainWindow) return { error: 'No window' };
+
+  const registry = readRegistry();
+  const active = registry[0];
+  if (!active) return { error: 'No active file' };
+
+  // Pre-seed the dialog at the active file's folder and name so the user
+  // starts from the current location.
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Save Database As',
+    defaultPath: active.path,          // opens the dialog in the active file's folder
+    filters: [{ name: 'TimeTrack Database', extensions: ['db'] }],
+    buttonLabel: 'Save As',
+  });
+
+  if (result.canceled || !result.filePath) return { canceled: true };
+
+  const newPath = result.filePath.endsWith('.db')
+    ? result.filePath
+    : result.filePath + '.db';
+
+  // Don't allow saving over the same file — that would be a no-op save, not Save As
+  if (newPath === active.path) {
+    dialog.showErrorBox('TimeTrack', 'The destination is the same as the current file.\nChoose a different name or folder.');
+    return { error: 'Same path' };
+  }
+
+  // Ask the server to copy+switch
+  try {
+    const resp = await fetch(`http://127.0.0.1:${PORT}/api/files/save-as`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: newPath }),
+    });
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      return { error: body.error ?? 'Save As failed' };
+    }
+  } catch (err) {
+    return { error: err.message };
+  }
+
+  // Update registry: add the new entry at the front (as active),
+  // keeping the original entry intact further down the list.
+  const name = path.basename(newPath, '.db');
+  const newEntry = { name, path: newPath };
+  const existing = registry.find(f => f.path === newPath);
+  if (!existing) {
+    registry.unshift(newEntry);
+  } else {
+    // Already in list — just move it to front
+    const idx = registry.indexOf(existing);
+    registry.splice(idx, 1);
+    registry.unshift(existing);
+  }
+  writeRegistry(registry);
+
+  buildMenu();
+  notifyRenderer();
+  return { ok: true, active: newEntry };
+}
+
+/**
  * Tell the renderer to clear its query cache and reload data.
  */
 function notifyRenderer() {
@@ -353,6 +429,9 @@ ipcMain.handle('files:new', async (_event, name) => {
 
 /** Open an existing .db file not yet in the registry. */
 ipcMain.handle('files:open', async () => doOpenFile());
+
+/** Save a copy of the current database to a new path and switch to it. */
+ipcMain.handle('files:saveas', async () => doSaveAs());
 
 // ─── Window ───────────────────────────────────────────────────────────────────
 

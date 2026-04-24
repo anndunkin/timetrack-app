@@ -53,6 +53,24 @@ export async function switchDb(newPath: string): Promise<void> {
   await loadDb(DB_PATH);
 }
 
+/**
+ * Save a copy of the current database to a new path, then switch to it.
+ * The original file is left untouched. The copy becomes the active file.
+ */
+export async function saveAsDb(newPath: string): Promise<void> {
+  const resolved = path.resolve(newPath);
+  // Flush in-memory state to disk first so the copy is fully up to date
+  flushSync();
+  // Copy binary SQLite file to new location
+  const dir = path.dirname(resolved);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.copyFileSync(DB_PATH, resolved);
+  // Now switch the active DB to the copy
+  if (db) { try { db.close(); } catch (_) {} }
+  DB_PATH = resolved;
+  await loadDb(DB_PATH);
+}
+
 /** Load (or create) a database file and run migrations. */
 async function loadDb(dbPath: string): Promise<void> {
   const dir = path.dirname(dbPath);

@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { type Server } from "http";
-import { storage, switchDb } from "./storage";
+import { storage, switchDb, saveAsDb } from "./storage";
 import {
   insertOrganizationSchema,
   insertDepartmentSchema,
@@ -120,6 +120,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({ ok: true, path: dbPath });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to switch database" });
+    }
+  });
+
+  // -- Save As (copy current DB to new path and switch to it) --
+  app.post("/api/files/save-as", async (req, res) => {
+    const { path: newPath } = req.body as { path?: string };
+    if (!newPath) return res.status(400).json({ error: "path is required" });
+    try {
+      await saveAsDb(newPath);
+      res.json({ ok: true, path: newPath });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to save database" });
     }
   });
 
