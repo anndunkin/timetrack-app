@@ -1,20 +1,15 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import {
   type Organization, type Department, type ProjectWithParsedDepts, type TimeEntry, type Settings,
 } from "@shared/schema";
-import { Clock, TrendingUp, Calendar } from "lucide-react";
+import { Clock, TrendingUp, Calendar, ChevronDown, ChevronRight } from "lucide-react";
 import { minutesToHHMM, minutesToDecimal, getYearRange, formatDate } from "@/lib/utils";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 // ── Elapsed-period helpers ───────────────────────────────────────────────────
-
-/**
- * Count the number of elapsed complete + partial weeks between yearStart and
- * today (inclusive). Always at least 1.
- */
 function elapsedWeeks(yearStart: string): number {
   const start = new Date(yearStart + "T00:00:00");
   const today = new Date();
@@ -24,10 +19,6 @@ function elapsedWeeks(yearStart: string): number {
   return Math.max(1, Math.ceil((today.getTime() - start.getTime() + 1) / msPerWeek));
 }
 
-/**
- * Count the number of elapsed months (complete + partial) between yearStart
- * and today. Always at least 1.
- */
 function elapsedMonths(yearStart: string): number {
   const start = new Date(yearStart + "T00:00:00");
   const today = new Date();
@@ -38,6 +29,38 @@ function elapsedMonths(yearStart: string): number {
     (today.getMonth() - start.getMonth()) +
     (today.getDate() >= start.getDate() ? 1 : 0);
   return Math.max(1, months);
+}
+
+// ── Drill-down entry list ─────────────────────────────────────────────────────
+function EntryList({
+  entries,
+  projName,
+  projColor,
+}: {
+  entries: TimeEntry[];
+  projName: (id: number) => string;
+  projColor: (id: number) => string;
+}) {
+  const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date));
+  return (
+    <div className="mt-2 ml-4 border-l-2 border-primary/20 pl-3 space-y-1">
+      {sorted.map(e => (
+        <div key={e.id} className="flex items-start justify-between gap-2 py-1.5 px-2 rounded hover:bg-muted/50 transition-colors">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="color-dot shrink-0" style={{ background: projColor(e.projectId) }} />
+            <span className="text-xs font-medium truncate">{projName(e.projectId)}</span>
+            {e.description && (
+              <span className="text-xs text-muted-foreground truncate">— {e.description}</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0 text-xs text-muted-foreground">
+            <span>{formatDate(e.date)}</span>
+            <span className="font-mono tabular-nums text-foreground">{minutesToHHMM(e.minutes)}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function AnnualPage() {
@@ -56,6 +79,12 @@ export default function AnnualPage() {
     enabled: !!settings,
   });
 
+  // Drill-down open state: "dept-<id>" or "proj-<id>"
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  function toggle(key: string) {
+    setOpenKey(prev => prev === key ? null : key);
+  }
+
   function orgName(id: number) { return orgs.find(o => o.id === id)?.name ?? "—"; }
   function orgColor(id: number) { return orgs.find(o => o.id === id)?.color ?? "#ccc"; }
   function deptName(id: number) { return allDepts.find(d => d.id === id)?.name ?? "—"; }
@@ -63,12 +92,9 @@ export default function AnnualPage() {
   function projColor(id: number) { return allProjects.find(p => p.id === id)?.color ?? "#ccc"; }
 
   const totalMinutes = entries.reduce((s, e) => s + e.minutes, 0);
-
-  // Elapsed periods (capped to the year — don't go beyond yearEnd)
   const weeks  = elapsedWeeks(yearStart);
   const months = elapsedMonths(yearStart);
 
-  // By month (use ISO month of entry date)
   const byMonth = useMemo(() => {
     const map: Record<string, number> = {};
     for (const e of entries) {
@@ -78,7 +104,6 @@ export default function AnnualPage() {
     return map;
   }, [entries]);
 
-  // Build ordered months list for the custom year
   const monthList = useMemo(() => {
     const list: string[] = [];
     const d = new Date(yearStart + "T00:00:00");
@@ -90,7 +115,6 @@ export default function AnnualPage() {
     return list;
   }, [yearStart, yearEnd]);
 
-  // By org — entries count at face value (no split by dept here)
   const byOrg = useMemo(() => {
     const map: Record<number, { name: string; color: string; minutes: number }> = {};
     for (const e of entries) {
@@ -102,38 +126,55 @@ export default function AnnualPage() {
     return Object.values(map).sort((a, b) => b.minutes - a.minutes);
   }, [entries, orgs]);
 
-  // By dept — split time equally when entry covers multiple departments.
-  // e.g. 60 min across 2 depts → 30 min each.
+  // By dept — split time equally; also keep a map of deptId → entries that touch it
   const byDept = useMemo(() => {
-    const map: Record<number, { name: string; minutes: number; orgName: string }> = {};
+    const map: Record<number, { id: number; name: string; minutes: number; orgName: string }> = {};
     for (const e of entries) {
       const deptCount = e.departmentIds.length || 1;
       const splitMins = e.minutes / deptCount;
       for (const dId of e.departmentIds) {
-        if (!map[dId]) {
-          map[dId] = { name: deptName(dId), minutes: 0, orgName: orgName(e.organizationId) };
-        }
+        if (!map[dId]) map[dId] = { id: dId, name: deptName(dId), minutes: 0, orgName: orgName(e.organizationId) };
         map[dId].minutes += splitMins;
       }
     }
-    // Round to nearest minute for display
     return Object.values(map)
       .map(d => ({ ...d, minutes: Math.round(d.minutes) }))
       .sort((a, b) => b.minutes - a.minutes);
   }, [entries, allDepts]);
 
-  // By project — full time (not split)
+  // By project — full time; keep projectId for drill-down lookup
   const byProject = useMemo(() => {
-    const map: Record<number, { name: string; color: string; minutes: number; budgetHours?: number | null }> = {};
+    const map: Record<number, { id: number; name: string; color: string; minutes: number; budgetHours?: number | null }> = {};
     for (const e of entries) {
       if (!map[e.projectId]) {
         const proj = allProjects.find(p => p.id === e.projectId);
-        map[e.projectId] = { name: projName(e.projectId), color: projColor(e.projectId), minutes: 0, budgetHours: proj?.budgetHours };
+        map[e.projectId] = { id: e.projectId, name: projName(e.projectId), color: projColor(e.projectId), minutes: 0, budgetHours: proj?.budgetHours };
       }
       map[e.projectId].minutes += e.minutes;
     }
     return Object.values(map).sort((a, b) => b.minutes - a.minutes);
   }, [entries, allProjects]);
+
+  // Entries keyed by deptId and projectId for drill-down
+  const entriesByDept = useMemo(() => {
+    const map: Record<number, TimeEntry[]> = {};
+    for (const e of entries) {
+      for (const dId of e.departmentIds) {
+        if (!map[dId]) map[dId] = [];
+        map[dId].push(e);
+      }
+    }
+    return map;
+  }, [entries]);
+
+  const entriesByProject = useMemo(() => {
+    const map: Record<number, TimeEntry[]> = {};
+    for (const e of entries) {
+      if (!map[e.projectId]) map[e.projectId] = [];
+      map[e.projectId].push(e);
+    }
+    return map;
+  }, [entries]);
 
   const maxMonthMins = Math.max(...Object.values(byMonth), 1);
   const maxProjectMins = Math.max(...byProject.map(p => p.minutes), 1);
@@ -244,7 +285,7 @@ export default function AnnualPage() {
               </section>
             )}
 
-            {/* By Department — time split equally for multi-dept entries */}
+            {/* By Department — drillable */}
             {byDept.length > 0 && (
               <section>
                 <h2 className="text-sm font-semibold mb-3">
@@ -252,56 +293,108 @@ export default function AnnualPage() {
                   <span className="ml-2 text-xs font-normal text-muted-foreground">(time split equally for multi-dept entries)</span>
                 </h2>
                 <div className="space-y-2">
-                  {byDept.map(d => (
-                    <div key={d.name} className="p-3 rounded-lg border bg-card">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div>
-                          <span className="text-sm font-medium">{d.name}</span>
-                          <span className="text-xs text-muted-foreground ml-1.5">{d.orgName}</span>
-                        </div>
-                        <span className="text-sm font-mono tabular-nums">{minutesToDecimal(d.minutes)}h</span>
+                  {byDept.map(d => {
+                    const key = `dept-${d.id}`;
+                    const isOpen = openKey === key;
+                    const deptEntries = entriesByDept[d.id] ?? [];
+                    return (
+                      <div key={d.id} className="rounded-lg border bg-card overflow-hidden">
+                        {/* Clickable header row */}
+                        <button
+                          type="button"
+                          onClick={() => toggle(key)}
+                          className="w-full p-3 text-left hover:bg-muted/40 transition-colors"
+                        >
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div className="flex items-center gap-2">
+                              {isOpen
+                                ? <ChevronDown size={13} className="text-muted-foreground shrink-0" />
+                                : <ChevronRight size={13} className="text-muted-foreground shrink-0" />
+                              }
+                              <span className="text-sm font-medium">{d.name}</span>
+                              <span className="text-xs text-muted-foreground">{d.orgName}</span>
+                              <span className="text-xs text-muted-foreground">({deptEntries.length} {deptEntries.length === 1 ? "entry" : "entries"})</span>
+                            </div>
+                            <span className="text-sm font-mono tabular-nums">{minutesToDecimal(d.minutes)}h</span>
+                          </div>
+                          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div className="h-full bg-primary/60 rounded-full transition-all" style={{ width: `${Math.round((d.minutes / totalMinutes) * 100)}%` }} />
+                          </div>
+                        </button>
+                        {/* Drill-down list */}
+                        {isOpen && (
+                          <div className="px-3 pb-3">
+                            <EntryList
+                              entries={deptEntries}
+                              projName={projName}
+                              projColor={projColor}
+                            />
+                          </div>
+                        )}
                       </div>
-                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-primary/60 rounded-full transition-all" style={{ width: `${Math.round((d.minutes / totalMinutes) * 100)}%` }} />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
             )}
           </div>
 
-          {/* By Project with budget */}
+          {/* By Project — drillable */}
           <section>
             <h2 className="text-sm font-semibold mb-3">By Project</h2>
             <div className="space-y-2">
               {byProject.map(p => {
+                const key = `proj-${p.id}`;
+                const isOpen = openKey === key;
+                const projEntries = entriesByProject[p.id] ?? [];
                 const budgetMins = p.budgetHours ? p.budgetHours * 60 : null;
                 const pct = budgetMins ? Math.min(100, Math.round((p.minutes / budgetMins) * 100)) : null;
                 const overBudget = budgetMins ? p.minutes > budgetMins : false;
                 return (
-                  <div key={p.name} className="p-3 rounded-lg border bg-card">
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className="color-dot" style={{ background: p.color }} />
-                      <span className="text-sm font-medium flex-1">{p.name}</span>
-                      <span className="text-sm font-mono tabular-nums">{minutesToDecimal(p.minutes)}h</span>
-                      {p.budgetHours && (
-                        <span className={`text-xs font-mono tabular-nums ${overBudget ? "text-destructive" : "text-muted-foreground"}`}>
-                          / {p.budgetHours}h
-                        </span>
+                  <div key={p.id} className="rounded-lg border bg-card overflow-hidden">
+                    {/* Clickable header row */}
+                    <button
+                      type="button"
+                      onClick={() => toggle(key)}
+                      className="w-full p-3 text-left hover:bg-muted/40 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 mb-1.5">
+                        {isOpen
+                          ? <ChevronDown size={13} className="text-muted-foreground shrink-0" />
+                          : <ChevronRight size={13} className="text-muted-foreground shrink-0" />
+                        }
+                        <span className="color-dot shrink-0" style={{ background: p.color }} />
+                        <span className="text-sm font-medium flex-1">{p.name}</span>
+                        <span className="text-xs text-muted-foreground">({projEntries.length} {projEntries.length === 1 ? "entry" : "entries"})</span>
+                        <span className="text-sm font-mono tabular-nums">{minutesToDecimal(p.minutes)}h</span>
+                        {p.budgetHours && (
+                          <span className={`text-xs font-mono tabular-nums ${overBudget ? "text-destructive" : "text-muted-foreground"}`}>
+                            / {p.budgetHours}h
+                          </span>
+                        )}
+                      </div>
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden ml-5">
+                        {pct !== null ? (
+                          <div className={`h-full rounded-full transition-all ${overBudget ? "bg-destructive" : "bg-primary/70"}`} style={{ width: `${pct}%` }} />
+                        ) : (
+                          <div className="h-full rounded-full transition-all" style={{ width: `${Math.round((p.minutes / maxProjectMins) * 100)}%`, background: p.color }} />
+                        )}
+                      </div>
+                      {pct !== null && (
+                        <p className={`text-xs mt-1 ml-5 ${overBudget ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                          {overBudget ? `${pct - 100}% over budget` : `${pct}% of budget used`}
+                        </p>
                       )}
-                    </div>
-                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                      {pct !== null ? (
-                        <div className={`h-full rounded-full transition-all ${overBudget ? "bg-destructive" : "bg-primary/70"}`} style={{ width: `${pct}%` }} />
-                      ) : (
-                        <div className="h-full rounded-full transition-all" style={{ width: `${Math.round((p.minutes / maxProjectMins) * 100)}%`, background: p.color }} />
-                      )}
-                    </div>
-                    {pct !== null && (
-                      <p className={`text-xs mt-1 ${overBudget ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-                        {overBudget ? `${pct - 100}% over budget` : `${pct}% of budget used`}
-                      </p>
+                    </button>
+                    {/* Drill-down list */}
+                    {isOpen && (
+                      <div className="px-3 pb-3">
+                        <EntryList
+                          entries={projEntries}
+                          projName={projName}
+                          projColor={projColor}
+                        />
+                      </div>
                     )}
                   </div>
                 );
