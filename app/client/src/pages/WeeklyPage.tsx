@@ -177,14 +177,20 @@ export default function WeeklyPage() {
                   {dayEntries.length > 0 && (
                     <div className="divide-y divide-border/30">
                       {dayEntries.map(e => (
-                        <div key={e.id} className="flex items-center gap-3 px-4 py-2.5">
-                          <span className="color-dot" style={{ background: projColor(e.projectId) }} />
+                        <div key={e.id} className="flex items-start gap-3 px-4 py-2.5">
+                          <span className="color-dot mt-1" style={{ background: projColor(e.projectId) }} />
                           <div className="flex-1 min-w-0">
-                            <span className="text-sm">{projName(e.projectId)}</span>
-                            {e.description && <span className="text-xs text-muted-foreground ml-1.5">— {e.description}</span>}
+                            <div className="flex items-baseline gap-1.5 flex-wrap">
+                              <span className="text-sm font-medium">{projName(e.projectId)}</span>
+                              <span className="text-xs text-muted-foreground">{e.departmentIds.map(id => deptName(id)).join(", ")}</span>
+                            </div>
+                            {e.description && (
+                              <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-line line-clamp-2">
+                                {e.description}
+                              </p>
+                            )}
                           </div>
-                          <span className="text-xs text-muted-foreground">{e.departmentIds.map(id => deptName(id)).join(", ")}</span>
-                          <span className="text-xs font-mono tabular-nums text-muted-foreground">{minutesToHHMM(e.minutes)}</span>
+                          <span className="text-xs font-mono tabular-nums text-muted-foreground shrink-0 mt-0.5">{minutesToHHMM(e.minutes)}</span>
                         </div>
                       ))}
                     </div>
