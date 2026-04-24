@@ -29,10 +29,28 @@ export default function WeeklyPage() {
   const { data: orgs = [] } = useQuery<Organization[]>({ queryKey: ["/api/organizations"] });
   const { data: allDepts = [] } = useQuery<Department[]>({ queryKey: ["/api/departments"] });
   const { data: allProjects = [] } = useQuery<ProjectWithParsedDepts[]>({ queryKey: ["/api/projects"] });
-  const { data: entries = [], isLoading } = useQuery<TimeEntry[]>({
+  const { data: rawEntries = [], isLoading } = useQuery<TimeEntry[]>({
     queryKey: ["/api/time-entries", weekStart, weekEnd],
     queryFn: () => apiRequest("GET", `/api/time-entries?start=${weekStart}&end=${weekEnd}`),
   });
+
+  // Normalize departmentIds — older DB rows may come back with the legacy
+  // singular `departmentId` field instead of the `departmentIds` array, or
+  // with departmentIds as a JSON string rather than a parsed array. Handle
+  // all three cases so the weekly view never crashes on legacy entries.
+  const entries = useMemo(() => rawEntries.map((e: any) => {
+    let dids: number[];
+    if (Array.isArray(e.departmentIds)) {
+      dids = e.departmentIds;
+    } else if (typeof e.departmentIds === "string") {
+      try { dids = JSON.parse(e.departmentIds); } catch { dids = []; }
+    } else if (typeof e.departmentId === "number") {
+      dids = [e.departmentId];
+    } else {
+      dids = [];
+    }
+    return { ...e, departmentIds: dids } as TimeEntry;
+  }), [rawEntries]);
 
   function orgName(id: number) { return orgs.find(o => o.id === id)?.name ?? "—"; }
   function orgColor(id: number) { return orgs.find(o => o.id === id)?.color ?? "#ccc"; }

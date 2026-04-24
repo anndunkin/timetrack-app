@@ -73,7 +73,22 @@ export default function TimeEntryPage() {
   const { data: orgs = [] } = useQuery<Organization[]>({ queryKey: ["/api/organizations"] });
   const { data: allDepts = [] } = useQuery<Department[]>({ queryKey: ["/api/departments"] });
   const { data: allProjects = [] } = useQuery<ProjectWithParsedDepts[]>({ queryKey: ["/api/projects"] });
-  const { data: entries = [], isLoading } = useQuery<TimeEntry[]>({ queryKey: ["/api/time-entries"] });
+  const { data: rawEntries = [], isLoading } = useQuery<TimeEntry[]>({ queryKey: ["/api/time-entries"] });
+  // Normalize departmentIds — guard against legacy `departmentId` (singular)
+  // or JSON-string values that arrive from older DB rows.
+  const entries = useMemo(() => rawEntries.map((e: any) => {
+    let dids: number[];
+    if (Array.isArray(e.departmentIds)) {
+      dids = e.departmentIds;
+    } else if (typeof e.departmentIds === "string") {
+      try { dids = JSON.parse(e.departmentIds); } catch { dids = []; }
+    } else if (typeof e.departmentId === "number") {
+      dids = [e.departmentId];
+    } else {
+      dids = [];
+    }
+    return { ...e, departmentIds: dids } as TimeEntry;
+  }), [rawEntries]);
   const { data: recurringTasks = [], isLoading: recurLoading } = useQuery<RecurringTask[]>({
     queryKey: ["/api/recurring"],
   });

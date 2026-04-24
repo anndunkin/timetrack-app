@@ -73,11 +73,26 @@ export default function AnnualPage() {
   const yearStartDay = settings?.yearStartDay ?? 1;
   const { start: yearStart, end: yearEnd } = getYearRange(yearStartMonth, yearStartDay);
 
-  const { data: entries = [], isLoading } = useQuery<TimeEntry[]>({
+  const { data: rawEntries = [], isLoading } = useQuery<TimeEntry[]>({
     queryKey: ["/api/time-entries/annual", yearStart, yearEnd],
     queryFn: () => apiRequest("GET", `/api/time-entries?start=${yearStart}&end=${yearEnd}`),
     enabled: !!settings,
   });
+  // Normalize departmentIds — guard against legacy `departmentId` (singular)
+  // or JSON-string values that arrive from older DB rows.
+  const entries = useMemo(() => rawEntries.map((e: any) => {
+    let dids: number[];
+    if (Array.isArray(e.departmentIds)) {
+      dids = e.departmentIds;
+    } else if (typeof e.departmentIds === "string") {
+      try { dids = JSON.parse(e.departmentIds); } catch { dids = []; }
+    } else if (typeof e.departmentId === "number") {
+      dids = [e.departmentId];
+    } else {
+      dids = [];
+    }
+    return { ...e, departmentIds: dids } as TimeEntry;
+  }), [rawEntries]);
 
   // Drill-down open state: "dept-<id>" or "proj-<id>"
   const [openKey, setOpenKey] = useState<string | null>(null);
