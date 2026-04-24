@@ -213,10 +213,15 @@ function runMigrations(): void {
   const colNames = cols[0]?.values.map((r) => r[1] as string) ?? [];
   if (!colNames.includes("department_ids")) {
     db.run("ALTER TABLE time_entries ADD COLUMN department_ids TEXT NOT NULL DEFAULT '[]'");
-    // Back-fill: wrap each existing department_id into a JSON array
-    db.run("UPDATE time_entries SET department_ids = json_array(department_id) WHERE department_ids = '[]'");
     flushSync();
   }
+
+  // Back-fill: any row where department_ids is still '[]' gets wrapped from
+  // the legacy department_id column. Runs unconditionally on every startup so
+  // existing databases that already had the column (but missed the original
+  // back-fill) are fixed automatically.
+  db.run("UPDATE time_entries SET department_ids = json_array(department_id) WHERE department_ids = '[]' AND department_id IS NOT NULL");
+  flushSync();
 }
 
 function seedDefaults(): void {
