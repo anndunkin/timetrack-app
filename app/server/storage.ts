@@ -89,6 +89,161 @@ async function loadDb(dbPath: string): Promise<void> {
   seedDefaults();
 }
 
+/**
+ * Export all data for a single organisation to a brand-new TimeTrack database
+ * file at `destPath`. The exported file is a fully self-contained .db that can
+ * be opened directly in TimeTrack via File → Open.
+ *
+ * Exported tables:
+ *   - organizations   (just the one org)
+ *   - departments     (belonging to that org)
+ *   - projects        (linked to any of those departments)
+ *   - time_entries    (for that org)
+ *   - recurring_tasks (for that org)
+ *   - settings        (copied from current DB)
+ */
+export function exportOrgDb(orgId: number, destPath: string): void {
+  if (!db || !SQL) throw new Error("Database not initialised");
+
+  const resolved = path.resolve(destPath);
+  const dir = path.dirname(resolved);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  // Build a fresh in-memory DB with the same schema
+  const exportDb = new SQL.Database();
+
+  // ── Schema ──────────────────────────────────────────────────────────────
+  exportDb.run(`
+    CREATE TABLE IF NOT EXISTS organizations (
+      id    INTEGER PRIMARY KEY AUTOINCREMENT,
+      name  TEXT NOT NULL,
+      color TEXT NOT NULL DEFAULT '#6366f1'
+    );
+    CREATE TABLE IF NOT EXISTS departments (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      name            TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS projects (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      name            TEXT NOT NULL,
+      department_ids  TEXT NOT NULL DEFAULT '[]',
+      organization_id INTEGER REFERENCES organizations(id),
+      budget_hours    REAL,
+      color           TEXT NOT NULL DEFAULT '#6366f1'
+    );
+    CREATE TABLE IF NOT EXISTS time_entries (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      date            TEXT NOT NULL,
+      minutes         INTEGER NOT NULL,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id),
+      department_id   INTEGER,
+      department_ids  TEXT NOT NULL DEFAULT '[]',
+      project_id      INTEGER NOT NULL REFERENCES projects(id),
+      description     TEXT
+    );
+    CREATE TABLE IF NOT EXISTS recurring_tasks (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id),
+      department_ids  TEXT NOT NULL DEFAULT '[]',
+      project_id      INTEGER NOT NULL REFERENCES projects(id),
+      description     TEXT,
+      minutes         INTEGER NOT NULL,
+      frequency       TEXT NOT NULL,
+      start_date      TEXT NOT NULL,
+      last_run        TEXT,
+      enabled         INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS settings (
+      id                INTEGER PRIMARY KEY DEFAULT 1,
+      year_start_month  INTEGER NOT NULL DEFAULT 1,
+      year_start_day    INTEGER NOT NULL DEFAULT 1
+    );
+  `);
+
+  // ── Copy organisation ────────────────────────────────────────────────────
+  const orgs = toObjects<any>(db.exec(
+    "SELECT * FROM organizations WHERE id = ?", [orgId]
+  ));
+  if (!orgs.length) throw new Error(`Organisation ${orgId} not found`);
+  for (const o of orgs) {
+    exportDb.run("INSERT INTO organizations (id, name, color) VALUES (?,?,?)",
+      [o.id, o.name, o.color]);
+  }
+
+  // ── Copy departments ─────────────────────────────────────────────────────
+  const depts = toObjects<any>(db.exec(
+    "SELECT * FROM departments WHERE organization_id = ?", [orgId]
+  ));
+  const deptIds = depts.map((d: any) => d.id as number);
+  for (const d of depts) {
+    exportDb.run("INSERT INTO departments (id, organization_id, name) VALUES (?,?,?)",
+      [d.id, d.organization_id, d.name]);
+  }
+
+  // ── Copy projects linked to any of those departments ─────────────────────
+  // A project belongs here if any entry in its department_ids JSON array
+  // matches one of the org's department IDs.
+  const allProjects = toObjects<any>(db.exec("SELECT * FROM projects"));
+  const orgProjects = allProjects.filter((p: any) => {
+    try {
+      const ids: number[] = JSON.parse(p.department_ids ?? "[]");
+      return ids.some(id => deptIds.includes(id));
+    } catch { return false; }
+  });
+  const projIds = orgProjects.map((p: any) => p.id as number);
+  for (const p of orgProjects) {
+    exportDb.run(
+      "INSERT INTO projects (id, name, department_ids, organization_id, budget_hours, color) VALUES (?,?,?,?,?,?)",
+      [p.id, p.name, p.department_ids, p.organization_id, p.budget_hours, p.color]
+    );
+  }
+
+  // ── Copy time entries ────────────────────────────────────────────────────
+  const entries = toObjects<any>(db.exec(
+    "SELECT * FROM time_entries WHERE organization_id = ?", [orgId]
+  ));
+  for (const e of entries) {
+    exportDb.run(
+      `INSERT INTO time_entries
+         (id, date, minutes, organization_id, department_id, department_ids, project_id, description)
+       VALUES (?,?,?,?,?,?,?,?)`,
+      [e.id, e.date, e.minutes, e.organization_id,
+       e.department_id, e.department_ids, e.project_id, e.description]
+    );
+  }
+
+  // ── Copy recurring tasks ─────────────────────────────────────────────────
+  const recur = toObjects<any>(db.exec(
+    "SELECT * FROM recurring_tasks WHERE organization_id = ?", [orgId]
+  ));
+  for (const r of recur) {
+    exportDb.run(
+      `INSERT INTO recurring_tasks
+         (id, organization_id, department_ids, project_id, description,
+          minutes, frequency, start_date, last_run, enabled)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      [r.id, r.organization_id, r.department_ids, r.project_id, r.description,
+       r.minutes, r.frequency, r.start_date, r.last_run, r.enabled]
+    );
+  }
+
+  // ── Copy settings ────────────────────────────────────────────────────────
+  const settingsRows = toObjects<any>(db.exec("SELECT * FROM settings LIMIT 1"));
+  if (settingsRows.length) {
+    const s = settingsRows[0];
+    exportDb.run(
+      "INSERT INTO settings (id, year_start_month, year_start_day) VALUES (?,?,?)",
+      [1, s.year_start_month, s.year_start_day]
+    );
+  }
+
+  // ── Write to disk ────────────────────────────────────────────────────────
+  const data = exportDb.export();
+  fs.writeFileSync(resolved, Buffer.from(data));
+  exportDb.close();
+}
+
 /** Write the in-memory DB to disk immediately. */
 function flushSync(): void {
   if (!db) return;

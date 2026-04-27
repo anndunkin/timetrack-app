@@ -21,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Pencil, Trash2, Building2, Layers, FolderKanban, Clock } from "lucide-react";
+import { Plus, Pencil, Trash2, Building2, Layers, FolderKanban, Clock, Download } from "lucide-react";
 import { cn, minutesToDecimal } from "@/lib/utils";
 
 // ─── Color picker ─────────────────────────────────────────────
@@ -291,6 +291,26 @@ export default function AdminPage() {
   const [orgDialog, setOrgDialog] = useState<{ open: boolean; org?: Organization }>({ open: false });
   const [deptDialog, setDeptDialog] = useState<{ open: boolean; dept?: Department }>({ open: false });
   const [projDialog, setProjDialog] = useState<{ open: boolean; project?: ProjectWithParsedDepts }>({ open: false });
+  const [exportingOrgId, setExportingOrgId] = useState<number | null>(null);
+
+  async function handleExportOrg(org: Organization) {
+    if (!(window as any).timetrackFiles?.exportOrg) {
+      toast({ title: "Export not available", description: "Run the desktop app to use this feature.", variant: "destructive" });
+      return;
+    }
+    setExportingOrgId(org.id);
+    try {
+      const result = await (window as any).timetrackFiles.exportOrg(org.id);
+      if (result?.canceled) return;
+      if (result?.error) {
+        toast({ title: "Export failed", description: result.error, variant: "destructive" });
+      } else {
+        toast({ title: "Export complete", description: `"${org.name}" saved to ${result.path}` });
+      }
+    } finally {
+      setExportingOrgId(null);
+    }
+  }
 
   const { data: orgs = [] } = useQuery<Organization[]>({ queryKey: ["/api/organizations"] });
   const { data: depts = [] } = useQuery<Department[]>({ queryKey: ["/api/departments"] });
@@ -354,6 +374,16 @@ export default function AdminPage() {
                   <span className="color-dot" style={{ background: org.color }} />
                   <span className="flex-1 font-medium text-sm">{org.name}</span>
                   <span className="text-xs text-muted-foreground">{depts.filter(d => d.organizationId === org.id).length} dept{depts.filter(d => d.organizationId === org.id).length !== 1 ? "s" : ""}</span>
+                  <button
+                    data-testid={`button-export-org-${org.id}`}
+                    onClick={() => handleExportOrg(org)}
+                    disabled={exportingOrgId === org.id}
+                    className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
+                    aria-label={`Export ${org.name}`}
+                    title="Export organization to new file"
+                  >
+                    <Download size={14} />
+                  </button>
                   <button
                     data-testid={`button-edit-org-${org.id}`}
                     onClick={() => setOrgDialog({ open: true, org })}

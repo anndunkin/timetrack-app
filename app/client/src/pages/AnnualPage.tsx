@@ -234,7 +234,6 @@ export default function AnnualPage() {
             <div className="flex items-center gap-2 min-w-0">
               <span className="color-dot shrink-0" style={{ background: o.color }} />
               <p className="text-sm font-medium truncate">{o.name}</p>
-              <p className="text-xs text-muted-foreground shrink-0">{Math.round((o.minutes / totalMinutes) * 100)}%</p>
             </div>
             <p className="text-lg font-semibold font-mono text-right">{minutesToDecimal(o.minutes)}h</p>
             <p className="text-lg font-semibold font-mono text-right">{minutesToDecimal(Math.round(o.minutes / weeks))}h</p>

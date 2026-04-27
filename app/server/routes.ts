@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { type Server } from "http";
-import { storage, switchDb, saveAsDb, runDueRecurrences } from "./storage";
+import { storage, switchDb, saveAsDb, exportOrgDb, runDueRecurrences } from "./storage";
 import {
   insertOrganizationSchema,
   insertDepartmentSchema,
@@ -147,6 +147,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // -- Export org to standalone .db file --
+  app.post("/api/organizations/:id/export", (req, res) => {
+    const orgId = Number(req.params.id);
+    const { path: destPath } = req.body as { path?: string };
+    if (!destPath) return res.status(400).json({ error: "path is required" });
+    if (!isValidDbPath(destPath)) return res.status(400).json({ error: "Invalid database path" });
+    try {
+      exportOrgDb(orgId, destPath);
+      res.json({ ok: true, path: destPath });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Export failed" });
     }
   });
 

@@ -433,6 +433,38 @@ ipcMain.handle('files:open', async () => doOpenFile());
 /** Save a copy of the current database to a new path and switch to it. */
 ipcMain.handle('files:saveas', async () => doSaveAs());
 
+/**
+ * Export all data for a single organization to a new .db file.
+ * Shows a native Save dialog, then calls the server export route.
+ */
+ipcMain.handle('orgs:export', async (_event, orgId) => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Export Organization Data',
+    defaultPath: path.join(app.getPath('documents'), 'timetrack-export.db'),
+    filters: [{ name: 'TimeTrack Database', extensions: ['db'] }],
+  });
+  if (result.canceled || !result.filePath) return { canceled: true };
+
+  const destPath = result.filePath.endsWith('.db')
+    ? result.filePath
+    : result.filePath + '.db';
+
+  try {
+    const resp = await fetch(`http://127.0.0.1:${PORT}/api/organizations/${orgId}/export`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: destPath }),
+    });
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      return { error: body.error ?? 'Export failed' };
+    }
+    return { ok: true, path: destPath };
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
 // ─── Window ───────────────────────────────────────────────────────────────────
 
 async function createWindow() {
