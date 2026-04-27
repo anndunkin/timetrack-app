@@ -31,6 +31,17 @@ function elapsedMonths(yearStart: string): number {
   return Math.max(1, months);
 }
 
+// ── Small metric box ────────────────────────────────────────────────────────
+function MetricBox({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center px-4 py-2.5 rounded-lg border bg-muted/40 min-w-[110px] text-center">
+      <p className="text-xs text-muted-foreground font-medium mb-0.5">{label}</p>
+      <p className="text-lg font-semibold font-mono tabular-nums">{value}</p>
+      {sub && <p className="text-[10px] text-muted-foreground mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
 // ── Drill-down entry list ─────────────────────────────────────────────────────
 function EntryList({
   entries,
@@ -206,38 +217,31 @@ export default function AnnualPage() {
         </div>
       </div>
 
-      {/* KPI cards — one row per organisation */}
+      {/* KPI rows — org name on left, three metric boxes on right */}
       <div className="space-y-2 mb-8">
-        {/* Header row */}
-        <div className="grid grid-cols-[1fr_repeat(3,_140px)] gap-4 px-1">
-          <span />
-          <span className="text-xs text-muted-foreground text-right">Total Hours</span>
-          <span className="text-xs text-muted-foreground text-right">Avg / Week</span>
-          <span className="text-xs text-muted-foreground text-right">Avg / Month</span>
-        </div>
+
         {/* Overall row */}
-        <div className="grid grid-cols-[1fr_repeat(3,_140px)] gap-4 p-4 rounded-lg border bg-card items-center">
-          <p className="text-sm font-semibold">All Organizations</p>
-          <p className="text-xl font-semibold font-mono text-right" data-testid="annual-total-hours">{minutesToDecimal(totalMinutes)}h</p>
-          <div className="text-right">
-            <p className="text-xl font-semibold font-mono">{minutesToDecimal(Math.round(totalMinutes / weeks))}h</p>
-            <p className="text-xs text-muted-foreground">over {weeks} wk{weeks !== 1 ? "s" : ""}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-xl font-semibold font-mono">{minutesToDecimal(Math.round(totalMinutes / months))}h</p>
-            <p className="text-xs text-muted-foreground">over {months} mo{months !== 1 ? "s" : ""}</p>
+        <div className="flex items-center gap-3 p-3 rounded-lg border bg-card" data-testid="annual-total-row">
+          <p className="text-sm font-semibold flex-1">All Organizations</p>
+          <div className="flex items-center gap-2">
+            <MetricBox label="Total Hours" value={`${minutesToDecimal(totalMinutes)}h`} />
+            <MetricBox label="Avg / Week"  value={`${minutesToDecimal(Math.round(totalMinutes / weeks))}h`}  sub={`over ${weeks} wk${weeks !== 1 ? "s" : ""}`} />
+            <MetricBox label="Avg / Month" value={`${minutesToDecimal(Math.round(totalMinutes / months))}h`} sub={`over ${months} mo${months !== 1 ? "s" : ""}`} />
           </div>
         </div>
+
         {/* Per-org rows */}
         {byOrg.map(o => (
-          <div key={o.name} className="grid grid-cols-[1fr_repeat(3,_140px)] gap-4 p-4 rounded-lg border bg-card items-center">
-            <div className="flex items-center gap-2 min-w-0">
+          <div key={o.name} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
               <span className="color-dot shrink-0" style={{ background: o.color }} />
               <p className="text-sm font-medium truncate">{o.name}</p>
             </div>
-            <p className="text-lg font-semibold font-mono text-right">{minutesToDecimal(o.minutes)}h</p>
-            <p className="text-lg font-semibold font-mono text-right">{minutesToDecimal(Math.round(o.minutes / weeks))}h</p>
-            <p className="text-lg font-semibold font-mono text-right">{minutesToDecimal(Math.round(o.minutes / months))}h</p>
+            <div className="flex items-center gap-2">
+              <MetricBox label="Total Hours" value={`${minutesToDecimal(o.minutes)}h`} />
+              <MetricBox label="Avg / Week"  value={`${minutesToDecimal(Math.round(o.minutes / weeks))}h`} />
+              <MetricBox label="Avg / Month" value={`${minutesToDecimal(Math.round(o.minutes / months))}h`} />
+            </div>
           </div>
         ))}
       </div>
