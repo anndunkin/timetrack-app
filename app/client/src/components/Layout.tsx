@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Clock, Calendar, BarChart2, Settings, Building2, Sun, Moon, Database } from "lucide-react";
+import { Clock, Calendar, CalendarDays, BarChart2, Settings, Building2, Sun, Moon, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "./ThemeProvider";
 import { queryClient } from "@/lib/queryClient";
@@ -8,6 +8,7 @@ import { queryClient } from "@/lib/queryClient";
 const navItems = [
   { href: "/",         label: "Log Time",  icon: Clock },
   { href: "/weekly",   label: "Weekly",    icon: Calendar },
+  { href: "/monthly",  label: "Monthly",   icon: CalendarDays },
   { href: "/annual",   label: "Annual",    icon: BarChart2 },
   { href: "/admin",    label: "Admin",     icon: Building2 },
   { href: "/settings", label: "Settings",  icon: Settings },

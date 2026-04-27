@@ -85,3 +85,25 @@ export function isoWeekDays(weekStart: string): string[] {
 }
 
 export const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/**
+ * Given a year and 1-based month, return the ISO strings for the first and
+ * last calendar day of that month (always full calendar month, not a custom
+ * year boundary).
+ */
+export function getMonthRange(year: number, month: number): { start: string; end: string } {
+  const first = new Date(year, month - 1, 1);
+  const last  = new Date(year, month, 0); // day 0 of next month = last day of this month
+  return { start: localISO(first), end: localISO(last) };
+}
+
+/** Return the year and 1-based month for today. */
+export function currentYearMonth(): { year: number; month: number } {
+  const d = new Date();
+  return { year: d.getFullYear(), month: d.getMonth() + 1 };
+}
+
+export const MONTH_NAMES_LONG = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];

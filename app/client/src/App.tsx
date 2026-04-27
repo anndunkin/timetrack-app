@@ -7,6 +7,7 @@ import { ThemeProvider } from "./components/ThemeProvider";
 import Layout from "./components/Layout";
 import TimeEntryPage from "./pages/TimeEntryPage";
 import WeeklyPage from "./pages/WeeklyPage";
+import MonthlyPage from "./pages/MonthlyPage";
 import AnnualPage from "./pages/AnnualPage";
 import AdminPage from "./pages/AdminPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -22,6 +23,7 @@ export default function App() {
             <Switch>
               <Route path="/" component={TimeEntryPage} />
               <Route path="/weekly" component={WeeklyPage} />
+              <Route path="/monthly" component={MonthlyPage} />
               <Route path="/annual" component={AnnualPage} />
               <Route path="/admin" component={AdminPage} />
               <Route path="/settings" component={SettingsPage} />
