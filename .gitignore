@@ -7,3 +7,4 @@ app/timetracker.db
 # Code signing certificate (keep off GitHub)
 build/*.pfx
 build/*.pem
+*.db
