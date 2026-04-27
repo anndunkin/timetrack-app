@@ -60,6 +60,22 @@ export default function WeeklyPage() {
 
   const totalMinutes = entries.reduce((s, e) => s + e.minutes, 0);
 
+  // Group by organisation for top summary
+  const byOrg = useMemo(() => {
+    const map: Record<number, { name: string; color: string; minutes: number }> = {};
+    for (const e of entries) {
+      if (!map[e.organizationId]) {
+        map[e.organizationId] = {
+          name: orgName(e.organizationId),
+          color: orgColor(e.organizationId),
+          minutes: 0,
+        };
+      }
+      map[e.organizationId].minutes += e.minutes;
+    }
+    return Object.values(map).sort((a, b) => b.minutes - a.minutes);
+  }, [entries, orgs]);
+
   // Group by day
   const byDay: Record<string, TimeEntry[]> = {};
   for (const day of weekDays) byDay[day] = [];
@@ -113,20 +129,26 @@ export default function WeeklyPage() {
         </div>
       </div>
 
-      {/* Totals */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="p-4 rounded-lg border bg-card">
-          <p className="text-xs text-muted-foreground mb-1">Total Hours</p>
-          <p className="text-xl font-semibold font-mono" data-testid="text-total-hours">{minutesToDecimal(totalMinutes)}</p>
+      {/* Totals — per organisation */}
+      <div className="space-y-2 mb-6">
+        {/* Overall */}
+        <div className="flex items-center justify-between p-4 rounded-lg border bg-card">
+          <p className="text-sm font-semibold">Total Hours</p>
+          <p className="text-xl font-semibold font-mono" data-testid="text-total-hours">{minutesToDecimal(totalMinutes)}h</p>
         </div>
-        <div className="p-4 rounded-lg border bg-card">
-          <p className="text-xs text-muted-foreground mb-1">Entries</p>
-          <p className="text-xl font-semibold" data-testid="text-entry-count">{entries.length}</p>
-        </div>
-        <div className="p-4 rounded-lg border bg-card">
-          <p className="text-xs text-muted-foreground mb-1">Projects</p>
-          <p className="text-xl font-semibold" data-testid="text-project-count">{byProject.length}</p>
-        </div>
+        {/* Per-org */}
+        {byOrg.map(o => (
+          <div key={o.name} className="flex items-center justify-between p-3 rounded-lg border bg-card">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="color-dot shrink-0" style={{ background: o.color }} />
+              <p className="text-sm font-medium truncate">{o.name}</p>
+              {totalMinutes > 0 && (
+                <p className="text-xs text-muted-foreground shrink-0">{Math.round((o.minutes / totalMinutes) * 100)}%</p>
+              )}
+            </div>
+            <p className="text-lg font-semibold font-mono tabular-nums shrink-0">{minutesToDecimal(o.minutes)}h</p>
+          </div>
+        ))}
       </div>
 
       {isLoading ? (

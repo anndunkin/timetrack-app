@@ -206,30 +206,41 @@ export default function AnnualPage() {
         </div>
       </div>
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-        <div className="p-4 rounded-lg border bg-card">
-          <p className="text-xs text-muted-foreground mb-1">Total Hours</p>
-          <p className="text-xl font-semibold font-mono" data-testid="annual-total-hours">{minutesToDecimal(totalMinutes)}</p>
+      {/* KPI cards — one row per organisation */}
+      <div className="space-y-2 mb-8">
+        {/* Header row */}
+        <div className="grid grid-cols-[1fr_repeat(3,_140px)] gap-4 px-1">
+          <span />
+          <span className="text-xs text-muted-foreground text-right">Total Hours</span>
+          <span className="text-xs text-muted-foreground text-right">Avg / Week</span>
+          <span className="text-xs text-muted-foreground text-right">Avg / Month</span>
         </div>
-        <div className="p-4 rounded-lg border bg-card">
-          <p className="text-xs text-muted-foreground mb-1">Entries</p>
-          <p className="text-xl font-semibold">{entries.length}</p>
+        {/* Overall row */}
+        <div className="grid grid-cols-[1fr_repeat(3,_140px)] gap-4 p-4 rounded-lg border bg-card items-center">
+          <p className="text-sm font-semibold">All Organizations</p>
+          <p className="text-xl font-semibold font-mono text-right" data-testid="annual-total-hours">{minutesToDecimal(totalMinutes)}h</p>
+          <div className="text-right">
+            <p className="text-xl font-semibold font-mono">{minutesToDecimal(Math.round(totalMinutes / weeks))}h</p>
+            <p className="text-xs text-muted-foreground">over {weeks} wk{weeks !== 1 ? "s" : ""}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xl font-semibold font-mono">{minutesToDecimal(Math.round(totalMinutes / months))}h</p>
+            <p className="text-xs text-muted-foreground">over {months} mo{months !== 1 ? "s" : ""}</p>
+          </div>
         </div>
-        <div className="p-4 rounded-lg border bg-card">
-          <p className="text-xs text-muted-foreground mb-1">Avg / Week</p>
-          <p className="text-xl font-semibold font-mono">
-            {minutesToDecimal(Math.round(totalMinutes / weeks))}h
-          </p>
-          <p className="text-xs text-muted-foreground mt-0.5">over {weeks} wk{weeks !== 1 ? "s" : ""}</p>
-        </div>
-        <div className="p-4 rounded-lg border bg-card">
-          <p className="text-xs text-muted-foreground mb-1">Avg / Month</p>
-          <p className="text-xl font-semibold font-mono">
-            {minutesToDecimal(Math.round(totalMinutes / months))}h
-          </p>
-          <p className="text-xs text-muted-foreground mt-0.5">over {months} mo{months !== 1 ? "s" : ""}</p>
-        </div>
+        {/* Per-org rows */}
+        {byOrg.map(o => (
+          <div key={o.name} className="grid grid-cols-[1fr_repeat(3,_140px)] gap-4 p-4 rounded-lg border bg-card items-center">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="color-dot shrink-0" style={{ background: o.color }} />
+              <p className="text-sm font-medium truncate">{o.name}</p>
+              <p className="text-xs text-muted-foreground shrink-0">{Math.round((o.minutes / totalMinutes) * 100)}%</p>
+            </div>
+            <p className="text-lg font-semibold font-mono text-right">{minutesToDecimal(o.minutes)}h</p>
+            <p className="text-lg font-semibold font-mono text-right">{minutesToDecimal(Math.round(o.minutes / weeks))}h</p>
+            <p className="text-lg font-semibold font-mono text-right">{minutesToDecimal(Math.round(o.minutes / months))}h</p>
+          </div>
+        ))}
       </div>
 
       {isLoading ? (
