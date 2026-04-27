@@ -195,7 +195,7 @@ export function exportOrgDb(orgId: number, destPath: string): void {
   for (const p of orgProjects) {
     exportDb.run(
       "INSERT INTO projects (id, name, department_ids, organization_id, budget_hours, color) VALUES (?,?,?,?,?,?)",
-      [p.id, p.name, p.department_ids, p.organization_id, p.budget_hours, p.color]
+      [p.id, p.name, p.department_ids ?? '[]', p.organization_id ?? null, p.budget_hours ?? null, p.color]
     );
   }
 
@@ -209,7 +209,7 @@ export function exportOrgDb(orgId: number, destPath: string): void {
          (id, date, minutes, organization_id, department_id, department_ids, project_id, description)
        VALUES (?,?,?,?,?,?,?,?)`,
       [e.id, e.date, e.minutes, e.organization_id,
-       e.department_id, e.department_ids, e.project_id, e.description]
+       e.department_id ?? null, e.department_ids ?? '[]', e.project_id, e.description ?? null]
     );
   }
 
@@ -223,8 +223,8 @@ export function exportOrgDb(orgId: number, destPath: string): void {
          (id, organization_id, department_ids, project_id, description,
           minutes, frequency, start_date, last_run, enabled)
        VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      [r.id, r.organization_id, r.department_ids, r.project_id, r.description,
-       r.minutes, r.frequency, r.start_date, r.last_run, r.enabled]
+      [r.id, r.organization_id, r.department_ids ?? '[]', r.project_id, r.description ?? null,
+       r.minutes, r.frequency, r.start_date, r.last_run ?? null, r.enabled]
     );
   }
 

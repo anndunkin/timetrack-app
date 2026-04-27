@@ -31,8 +31,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(result);
   });
   app.delete("/api/organizations/:id", (req, res) => {
-    storage.deleteOrganization(Number(req.params.id));
-    res.json({ success: true });
+    const id = Number(req.params.id);
+    if (!storage.getOrganizations().some(o => o.id === id))
+      return res.status(404).json({ error: "Not found" });
+    storage.deleteOrganization(id);
+    res.json({ ok: true });
   });
 
   // -- Departments --
@@ -53,8 +56,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(result);
   });
   app.delete("/api/departments/:id", (req, res) => {
-    storage.deleteDepartment(Number(req.params.id));
-    res.json({ success: true });
+    const id = Number(req.params.id);
+    if (!storage.getDepartments().some(d => d.id === id))
+      return res.status(404).json({ error: "Not found" });
+    storage.deleteDepartment(id);
+    res.json({ ok: true });
   });
 
   // -- Projects --
@@ -75,8 +81,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(result);
   });
   app.delete("/api/projects/:id", (req, res) => {
-    storage.deleteProject(Number(req.params.id));
-    res.json({ success: true });
+    const id = Number(req.params.id);
+    if (!storage.getProjects().some(p => p.id === id))
+      return res.status(404).json({ error: "Not found" });
+    storage.deleteProject(id);
+    res.json({ ok: true });
   });
 
   // -- Time Entries --
@@ -100,8 +109,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(result);
   });
   app.delete("/api/time-entries/:id", (req, res) => {
-    storage.deleteTimeEntry(Number(req.params.id));
-    res.json({ success: true });
+    const id = Number(req.params.id);
+    if (!storage.getTimeEntries().some(e => e.id === id))
+      return res.status(404).json({ error: "Not found" });
+    storage.deleteTimeEntry(id);
+    res.json({ ok: true });
   });
 
   // -- Settings --
@@ -160,7 +172,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       exportOrgDb(orgId, destPath);
       res.json({ ok: true, path: destPath });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Export failed" });
+      res.status(500).json({ error: err?.message ?? "Export failed" });
     }
   });
 
@@ -171,6 +183,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const normalized = p.replace(/\\/g, "/");
     if (normalized.includes("../") || normalized.includes("./")) return false;
     if (!p.toLowerCase().endsWith(".db")) return false;
+    // Block Windows absolute paths pointing to sensitive system directories
+    const lower = normalized.toLowerCase();
+    const blockedDirs = ["/windows/", "/system32/", "/program files", "/programdata/"];
+    if (blockedDirs.some(d => lower.includes(d))) return false;
     return true;
   }
 
