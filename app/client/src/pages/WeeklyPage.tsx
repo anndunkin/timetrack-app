@@ -129,21 +129,21 @@ export default function WeeklyPage() {
         </div>
       </div>
 
-      {/* Totals — per organisation */}
-      <div className="space-y-2 mb-6">
-        {/* Overall */}
-        <div className="flex items-center justify-between p-4 rounded-lg border bg-card">
-          <p className="text-sm font-semibold">Total Hours</p>
-          <p className="text-xl font-semibold font-mono" data-testid="text-total-hours">{minutesToDecimal(totalMinutes)}h</p>
+      {/* Totals — horizontal pill row */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        {/* Total */}
+        <div className="flex flex-col items-center justify-center px-4 py-2.5 rounded-lg border bg-card min-w-[90px]">
+          <p className="text-xs text-muted-foreground font-medium">Total</p>
+          <p className="text-lg font-semibold font-mono tabular-nums" data-testid="text-total-hours">{minutesToDecimal(totalMinutes)}h</p>
         </div>
         {/* Per-org */}
         {byOrg.map(o => (
-          <div key={o.name} className="flex items-center justify-between p-3 rounded-lg border bg-card">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="color-dot shrink-0" style={{ background: o.color }} />
-              <p className="text-sm font-medium truncate">{o.name}</p>
+          <div key={o.name} className="flex flex-col items-center justify-center px-4 py-2.5 rounded-lg border bg-card min-w-[90px]">
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <span className="color-dot" style={{ background: o.color }} />
+              <p className="text-xs text-muted-foreground font-medium truncate max-w-[120px]">{o.name}</p>
             </div>
-            <p className="text-lg font-semibold font-mono tabular-nums shrink-0">{minutesToDecimal(o.minutes)}h</p>
+            <p className="text-lg font-semibold font-mono tabular-nums">{minutesToDecimal(o.minutes)}h</p>
           </div>
         ))}
       </div>
