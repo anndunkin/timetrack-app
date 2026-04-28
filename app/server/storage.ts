@@ -168,7 +168,7 @@ export function exportOrgDb(orgId: number, destPath: string): void {
   if (!orgs.length) throw new Error(`Organisation ${orgId} not found`);
   for (const o of orgs) {
     exportDb.run("INSERT INTO organizations (id, name, color) VALUES (?,?,?)",
-      [o.id, o.name, o.color]);
+      [o.id, o.name, o.color ?? '#6366f1']);
   }
 
   // ── Copy departments ─────────────────────────────────────────────────────
@@ -195,7 +195,7 @@ export function exportOrgDb(orgId: number, destPath: string): void {
   for (const p of orgProjects) {
     exportDb.run(
       "INSERT INTO projects (id, name, department_ids, organization_id, budget_hours, color) VALUES (?,?,?,?,?,?)",
-      [p.id, p.name, p.department_ids ?? '[]', p.organization_id ?? null, p.budget_hours ?? null, p.color]
+      [p.id, p.name, p.department_ids ?? '[]', p.organization_id ?? null, p.budget_hours ?? null, p.color ?? '#6366f1']
     );
   }
 

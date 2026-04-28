@@ -167,7 +167,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const orgId = Number(req.params.id);
     const { path: destPath } = req.body as { path?: string };
     if (!destPath) return res.status(400).json({ error: "path is required" });
-    if (!isValidDbPath(destPath)) return res.status(400).json({ error: "Invalid database path" });
+    if (!isValidDbPath(destPath)) return res.status(400).json({ error: `Invalid database path: ${JSON.stringify(destPath)}` });
     try {
       exportOrgDb(orgId, destPath);
       res.json({ ok: true, path: destPath });

@@ -450,17 +450,20 @@ ipcMain.handle('orgs:export', async (_event, orgId) => {
     : result.filePath + '.db';
 
   try {
+    console.log('[orgs:export] destPath:', destPath);
     const resp = await fetch(`http://127.0.0.1:${PORT}/api/organizations/${orgId}/export`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ path: destPath }),
     });
+    const body = await resp.json().catch(() => ({}));
+    console.log('[orgs:export] server response:', resp.status, JSON.stringify(body));
     if (!resp.ok) {
-      const body = await resp.json().catch(() => ({}));
       return { error: body.error ?? 'Export failed' };
     }
     return { ok: true, path: destPath };
   } catch (err) {
+    console.error('[orgs:export] fetch error:', err);
     return { error: err.message };
   }
 });
