@@ -1,6 +1,6 @@
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
-import { rm, readFile, copyFile, mkdir } from "fs/promises";
+import { rm, readFile, copyFile, mkdir, readdir } from "fs/promises";
 import { createRequire } from "module";
 import path from "path";
 
@@ -75,6 +75,27 @@ async function buildAll() {
   } catch (e) {
     console.error("Could not copy sql-wasm.wasm:", e);
     process.exit(1); // Fail the build — the app won't work without the WASM
+  }
+
+  // Copy pdfkit's AFM font metrics + ICC profile into dist/data/ so they are
+  // available at runtime next to index.cjs.  pdfkit reads these via
+  // fs.readFileSync(__dirname + '/data/...') — __dirname resolves to the
+  // dist/ directory in the installed app, so the files must be there.
+  try {
+    const req = createRequire(import.meta.url);
+    const pdfkitEntry = req.resolve("pdfkit");
+    // pdfkit main → .../pdfkit/js/pdfkit.js  →  data/ is a sibling of js/
+    const pdfkitDataDir = path.join(path.dirname(pdfkitEntry), "data");
+    const destDataDir   = path.join("dist", "data");
+    await mkdir(destDataDir, { recursive: true });
+    const files = await readdir(pdfkitDataDir);
+    for (const file of files) {
+      await copyFile(path.join(pdfkitDataDir, file), path.join(destDataDir, file));
+    }
+    console.log(`copied ${files.length} pdfkit data files → dist/data/`);
+  } catch (e) {
+    console.error("Could not copy pdfkit data files:", e);
+    process.exit(1);
   }
 }
 
