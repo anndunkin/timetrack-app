@@ -15,7 +15,7 @@
   "build": {
     "appId": "com.timetrack.app",
     "productName": "TimeTrack",
-    "copyright": "Copyright © 2026 TimeTrack",
+    "copyright": "Copyright \u00a9 2026 TimeTrack",
     "buildDependenciesFromSource": false,
     "npmRebuild": false,
     "directories": {
@@ -47,7 +47,9 @@
       "forceCodeSigning": false,
       "signAndEditExecutable": false,
       "signtoolOptions": {
-        "signingHashAlgorithms": ["sha256"]
+        "signingHashAlgorithms": [
+          "sha256"
+        ]
       }
     },
     "nsis": {
@@ -61,7 +63,8 @@
       "uninstallerIcon": "build/icon.ico",
       "installerHeaderIcon": "build/icon.ico",
       "deleteAppDataOnUninstall": false
-    }
+    },
+    "afterPack": "./scripts/afterPack.cjs"
   },
   "devDependencies": {
     "electron": "^36.9.5",
