@@ -470,6 +470,23 @@ ipcMain.handle('orgs:export', async (_event, orgId) => {
 
 // ─── Window ───────────────────────────────────────────────────────────────────
 
+
+// Write PDF bytes to a temp file and open it in the system PDF viewer.
+ipcMain.handle('pdf:open', async (_event, { base64, filename }) => {
+  try {
+    const tmpDir = path.join(app.getPath('temp'), 'TimeTrack');
+    const fs = require('fs');
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+    const tmpPath = path.join(tmpDir, filename);
+    fs.writeFileSync(tmpPath, Buffer.from(base64, 'base64'));
+    const err = await shell.openPath(tmpPath);
+    if (err) return { error: err };
+    return { ok: true };
+  } catch (e) {
+    return { error: e.message };
+  }
+});
+
 async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -493,20 +510,6 @@ async function createWindow() {
     return { action: 'deny' };
   });
 
-  // Handle PDF / blob downloads — show native Save As dialog
-  mainWindow.webContents.session.on('will-download', async (_event, item) => {
-    const suggestedName = item.getFilename();
-    const result = await dialog.showSaveDialog(mainWindow, {
-      title:       'Save Report',
-      defaultPath: path.join(app.getPath('documents'), suggestedName),
-      filters:     [{ name: 'PDF Files', extensions: ['pdf'] }],
-    });
-    if (result.canceled || !result.filePath) {
-      item.cancel();
-    } else {
-      item.setSavePath(result.filePath);
-    }
-  });
 
   mainWindow.on('closed', () => { mainWindow = null; });
 

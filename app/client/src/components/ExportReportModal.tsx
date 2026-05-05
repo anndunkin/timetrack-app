@@ -121,19 +121,25 @@ export default function ExportReportModal({
         throw new Error(body.error ?? "Report generation failed");
       }
 
-      // Trigger browser / Electron download via blob URL
-      const blob = await resp.blob();
-      const url  = URL.createObjectURL(blob);
+      // Send PDF to main process to write to temp dir and open with system viewer
+      const arrayBuffer = await resp.arrayBuffer();
+      const bytes  = new Uint8Array(arrayBuffer);
+      let binary = "";
+      // btoa in chunks to avoid call-stack overflow on large PDFs
+      const CHUNK = 8192;
+      for (let i = 0; i < bytes.length; i += CHUNK) {
+        const chunk = bytes.subarray(i, i + CHUNK);
+        for (let j = 0; j < chunk.length; j++) binary += String.fromCharCode(chunk[j]);
+      }
+      const base64 = btoa(binary);
+
       const org  = orgs.find(o => o.id === Number(orgId));
       const name = `TimeTrack-${(org?.name ?? "Report").replace(/\s+/g, "-")}-${year}-${String(month).padStart(2,"0")}.pdf`;
 
-      const a = document.createElement("a");
-      a.href     = url;
-      a.download = name;
-      a.click();
-      URL.revokeObjectURL(url);
+      const result = await (window as any).timetrackFiles.openPdf({ base64, filename: name });
+      if (result?.error) throw new Error(result.error);
 
-      toast({ title: "Report downloaded", description: name });
+      toast({ title: "Report opened", description: name });
       onClose();
     } catch (err: any) {
       toast({ title: "Export failed", description: err.message, variant: "destructive" });
@@ -302,7 +308,7 @@ export default function ExportReportModal({
           <Button onClick={handleExport} disabled={loading || !orgId}>
             {loading
               ? <><Loader2 size={15} className="animate-spin mr-1.5" /> Generating…</>
-              : <><FileDown size={15} className="mr-1.5" /> Download PDF</>
+              : <><FileDown size={15} className="mr-1.5" /> Open PDF</>
             }
           </Button>
         </DialogFooter>
