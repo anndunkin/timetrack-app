@@ -8,6 +8,7 @@ import path from "path";
 // sql.js must be bundled so its JS is included in the server bundle.
 const allowlist = [
   "sql.js",
+  "pdfkit",
   "axios",
   "cors",
   "date-fns",
