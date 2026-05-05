@@ -377,6 +377,57 @@ function runMigrations(): void {
   // back-fill) are fixed automatically.
   db.run("UPDATE time_entries SET department_ids = json_array(department_id) WHERE department_ids = '[]' AND department_id IS NOT NULL");
   flushSync();
+
+  // Migration: correct last_run values that don't align with the task's
+  // schedule anchor.  The bug (fixed in runDueRecurrences) stored last_run =
+  // today instead of last_run = last scheduled date.  This snaps every
+  // task's last_run back to the latest scheduled date that is <= last_run.
+  correctLastRunAnchors();
+}
+
+/**
+ * For each recurring task whose last_run isn't on a valid schedule step from
+ * start_date, rewind it to the most recent correct step.  Idempotent.
+ */
+function correctLastRunAnchors(): void {
+  const toMs  = (s: string) => new Date(s + "T00:00:00").getTime();
+  const toISO = (d: Date)   => [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, "0"),
+    String(d.getDate()).padStart(2, "0"),
+  ].join("-");
+
+  const tasks = all<Record<string, unknown>>("SELECT id, frequency, start_date, last_run FROM recurring_tasks");
+  for (const t of tasks) {
+    const lastRun   = t.last_run   as string | null;
+    const startDate = t.start_date as string;
+    const frequency = t.frequency  as RecurringFrequency;
+    if (!lastRun || !startDate) continue;
+
+    const lastRunMs  = toMs(lastRun);
+    const startMs    = toMs(startDate);
+    if (lastRunMs < startMs) continue; // already behind start — leave alone
+
+    // Walk forward from startDate in freq steps until we overshoot lastRun.
+    // The step just before the overshoot is the correct anchor.
+    const cursor = new Date(startDate + "T00:00:00");
+    let prev = cursor.getTime() <= lastRunMs ? toISO(cursor) : null;
+
+    while (true) {
+      if (frequency === "daily")        cursor.setDate(cursor.getDate() + 1);
+      else if (frequency === "weekly")  cursor.setDate(cursor.getDate() + 7);
+      else                              cursor.setMonth(cursor.getMonth() + 1);
+
+      if (cursor.getTime() > lastRunMs) break;
+      prev = toISO(cursor);
+    }
+
+    // If the correct anchor differs from what's stored, fix it.
+    if (prev && prev !== lastRun) {
+      db.run("UPDATE recurring_tasks SET last_run = ? WHERE id = ?", [prev, t.id as number]);
+    }
+  }
+  flushSync();
 }
 
 function seedDefaults(): void {
@@ -530,7 +581,10 @@ export function runDueRecurrences(): void {
       );
     }
 
-    db.run("UPDATE recurring_tasks SET last_run = ? WHERE id = ?", [today, task.id]);
+    // Store the last *scheduled* date (not today) so the next interval
+    // advances from the correct anchor rather than from whenever the app happened to run.
+    const lastScheduled = dueDates[dueDates.length - 1];
+    db.run("UPDATE recurring_tasks SET last_run = ? WHERE id = ?", [lastScheduled, task.id]);
     flushSync();
   }
 }
