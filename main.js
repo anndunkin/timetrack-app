@@ -493,6 +493,21 @@ async function createWindow() {
     return { action: 'deny' };
   });
 
+  // Handle PDF / blob downloads — show native Save As dialog
+  mainWindow.webContents.session.on('will-download', async (_event, item) => {
+    const suggestedName = item.getFilename();
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title:       'Save Report',
+      defaultPath: path.join(app.getPath('documents'), suggestedName),
+      filters:     [{ name: 'PDF Files', extensions: ['pdf'] }],
+    });
+    if (result.canceled || !result.filePath) {
+      item.cancel();
+    } else {
+      item.setSavePath(result.filePath);
+    }
+  });
+
   mainWindow.on('closed', () => { mainWindow = null; });
 
   // Loading screen

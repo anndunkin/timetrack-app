@@ -4,12 +4,13 @@ import { apiRequest } from "@/lib/queryClient";
 import {
   type Organization, type Department, type ProjectWithParsedDepts, type TimeEntry,
 } from "@shared/schema";
-import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, FileDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   minutesToHHMM, minutesToDecimal, formatDate, todayISO,
   getMonthRange, currentYearMonth, MONTH_NAMES_LONG,
 } from "@/lib/utils";
+import ExportReportModal from "@/components/ExportReportModal";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -57,6 +58,7 @@ export default function MonthlyPage() {
   const today = currentYearMonth();
   const [year, setYear]   = useState(today.year);
   const [month, setMonth] = useState(today.month);
+  const [exportOpen, setExportOpen] = useState(false);
 
   function prevMonth() {
     if (month === 1) { setYear(y => y - 1); setMonth(12); }
@@ -167,15 +169,21 @@ export default function MonthlyPage() {
             {formatDate(monthStart)} — {formatDate(monthEnd)}
           </p>
         </div>
-        <div className="flex items-center gap-1">
-          <Button variant="outline" size="sm" onClick={prevMonth}>
-            <ChevronLeft size={16} />
-          </Button>
-          <Button variant="outline" size="sm" onClick={thisMonth} disabled={isCurrentMonth}>
-            This month
-          </Button>
-          <Button variant="outline" size="sm" onClick={nextMonth}>
-            <ChevronRight size={16} />
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="sm" onClick={prevMonth}>
+              <ChevronLeft size={16} />
+            </Button>
+            <Button variant="outline" size="sm" onClick={thisMonth} disabled={isCurrentMonth}>
+              This month
+            </Button>
+            <Button variant="outline" size="sm" onClick={nextMonth}>
+              <ChevronRight size={16} />
+            </Button>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setExportOpen(true)}>
+            <FileDown size={15} className="mr-1.5" />
+            Export Report
           </Button>
         </div>
       </div>
@@ -369,6 +377,12 @@ export default function MonthlyPage() {
           </div>
         </div>
       )}
+      <ExportReportModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        defaultYear={year}
+        defaultMonth={month}
+      />
     </div>
   );
 }

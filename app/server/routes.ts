@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { type Server } from "http";
 import { storage, switchDb, saveAsDb, exportOrgDb, runDueRecurrences } from "./storage";
+import { registerReportRoute } from "./reportRoute";
 import {
   insertOrganizationSchema,
   insertDepartmentSchema,
@@ -214,6 +215,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(500).json({ error: err.message ?? "Failed to save database" });
     }
   });
+
+  registerReportRoute(app);
 
   return httpServer;
 }
