@@ -477,7 +477,11 @@ ipcMain.handle('pdf:open', async (_event, { base64, filename }) => {
     const tmpDir = path.join(app.getPath('temp'), 'TimeTrack');
     const fs = require('fs');
     if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-    const tmpPath = path.join(tmpDir, filename);
+    // Use a timestamped filename so the PDF viewer always loads a fresh file
+    // (some viewers cache by path and won't reload if the name is the same)
+    const ts = Date.now();
+    const base = filename.replace(/\.pdf$/i, '');
+    const tmpPath = path.join(tmpDir, `${base}-${ts}.pdf`);
     fs.writeFileSync(tmpPath, Buffer.from(base64, 'base64'));
     const err = await shell.openPath(tmpPath);
     if (err) return { error: err };

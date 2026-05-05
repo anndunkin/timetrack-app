@@ -10,7 +10,7 @@ import {
   minutesToHHMM, minutesToDecimal, formatDate, todayISO,
   getMonthRange, currentYearMonth, MONTH_NAMES_LONG,
 } from "@/lib/utils";
-import ExportReportModal from "@/components/ExportReportModal";
+import ExportReportModal, { DEFAULT_REPORT_FIELDS, type ReportFields } from "@/components/ExportReportModal";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -58,7 +58,10 @@ export default function MonthlyPage() {
   const today = currentYearMonth();
   const [year, setYear]   = useState(today.year);
   const [month, setMonth] = useState(today.month);
-  const [exportOpen, setExportOpen] = useState(false);
+  const [exportOpen,   setExportOpen]   = useState(false);
+  // Lifted from modal so selections survive Dialog unmount on close
+  const [reportFields,  setReportFields]  = useState<ReportFields>(DEFAULT_REPORT_FIELDS);
+  const [reportTimeFmt, setReportTimeFmt] = useState<"decimal" | "hhmm">("decimal");
 
   function prevMonth() {
     if (month === 1) { setYear(y => y - 1); setMonth(12); }
@@ -382,6 +385,10 @@ export default function MonthlyPage() {
         onClose={() => setExportOpen(false)}
         defaultYear={year}
         defaultMonth={month}
+        fields={reportFields}
+        onFieldsChange={setReportFields}
+        timeFormat={reportTimeFmt}
+        onTimeFormatChange={setReportTimeFmt}
       />
     </div>
   );

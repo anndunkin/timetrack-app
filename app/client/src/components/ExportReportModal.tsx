@@ -1,6 +1,9 @@
 /**
  * ExportReportModal
  * Lets the user configure and download a monthly PDF report.
+ *
+ * fields and timeFormat are lifted to the parent so they survive
+ * Dialog close/reopen cycles (Radix unmounts portal children on close).
  */
 
 import { useState, useEffect } from "react";
@@ -32,7 +35,7 @@ import { FileDown, Loader2 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface ReportFields {
+export interface ReportFields {
   summary:             boolean;
   projectBreakdown:    boolean;
   departmentBreakdown: boolean;
@@ -41,12 +44,26 @@ interface ReportFields {
   budgetComparison:    boolean;
 }
 
+export const DEFAULT_REPORT_FIELDS: ReportFields = {
+  summary:             true,
+  projectBreakdown:    true,
+  departmentBreakdown: true,
+  dailyLog:            true,
+  descriptions:        true,
+  budgetComparison:    true,
+};
+
 interface Props {
   open:         boolean;
   onClose:      () => void;
   /** Pre-fill from the current Monthly view */
   defaultYear:  number;
   defaultMonth: number; // 1-12
+  /** Lifted state – survives Dialog unmount on close */
+  fields:       ReportFields;
+  onFieldsChange: (f: ReportFields) => void;
+  timeFormat:   "decimal" | "hhmm";
+  onTimeFormatChange: (f: "decimal" | "hhmm") => void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -63,6 +80,10 @@ export default function ExportReportModal({
   onClose,
   defaultYear,
   defaultMonth,
+  fields,
+  onFieldsChange,
+  timeFormat,
+  onTimeFormatChange,
 }: Props) {
   const { toast } = useToast();
 
@@ -70,38 +91,28 @@ export default function ExportReportModal({
     queryKey: ["/api/organizations"],
   });
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  const [orgId,       setOrgId]       = useState<string>("");
-  const [year,        setYear]        = useState(defaultYear);
-  const [month,       setMonth]       = useState(defaultMonth);
-  const [timeFormat,  setTimeFormat]  = useState<"decimal" | "hhmm">("decimal");
-  const [loading,     setLoading]     = useState(false);
-
-  const [fields, setFields] = useState<ReportFields>({
-    summary:             true,
-    projectBreakdown:    true,
-    departmentBreakdown: true,
-    dailyLog:            true,
-    descriptions:        true,
-    budgetComparison:    true,
-  });
+  // ── Local ephemeral state ─────────────────────────────────────────────────
+  const [orgId,   setOrgId]   = useState<string>("");
+  const [year,    setYear]    = useState(defaultYear);
+  const [month,   setMonth]   = useState(defaultMonth);
+  const [loading, setLoading] = useState(false);
 
   // Default orgId to first org once loaded
   useEffect(() => {
     if (orgs.length > 0 && !orgId) setOrgId(String(orgs[0].id));
   }, [orgs]);
 
-  // Sync defaults when parent month/year changes
+  // Sync year/month from parent when modal opens fresh
   useEffect(() => {
     setYear(defaultYear);
     setMonth(defaultMonth);
   }, [defaultYear, defaultMonth]);
 
   function toggleField(key: keyof ReportFields) {
-    setFields(f => ({ ...f, [key]: !f[key] }));
+    onFieldsChange({ ...fields, [key]: !fields[key] });
   }
 
-  // ── Download ───────────────────────────────────────────────────────────────
+  // ── Export ────────────────────────────────────────────────────────────────
   async function handleExport() {
     if (!orgId) {
       toast({ title: "Select an organization", variant: "destructive" });
@@ -121,11 +132,10 @@ export default function ExportReportModal({
         throw new Error(body.error ?? "Report generation failed");
       }
 
-      // Send PDF to main process to write to temp dir and open with system viewer
+      // Convert to base64 in chunks to avoid call-stack overflow on large PDFs
       const arrayBuffer = await resp.arrayBuffer();
       const bytes  = new Uint8Array(arrayBuffer);
       let binary = "";
-      // btoa in chunks to avoid call-stack overflow on large PDFs
       const CHUNK = 8192;
       for (let i = 0; i < bytes.length; i += CHUNK) {
         const chunk = bytes.subarray(i, i + CHUNK);
@@ -136,6 +146,7 @@ export default function ExportReportModal({
       const org  = orgs.find(o => o.id === Number(orgId));
       const name = `TimeTrack-${(org?.name ?? "Report").replace(/\s+/g, "-")}-${year}-${String(month).padStart(2,"0")}.pdf`;
 
+      // Send to main process — writes to temp dir and opens in system PDF viewer
       const result = await (window as any).timetrackFiles.openPdf({ base64, filename: name });
       if (result?.error) throw new Error(result.error);
 
@@ -282,7 +293,7 @@ export default function ExportReportModal({
             <Label className="text-sm font-medium">Time format</Label>
             <RadioGroup
               value={timeFormat}
-              onValueChange={v => setTimeFormat(v as "decimal" | "hhmm")}
+              onValueChange={v => onTimeFormatChange(v as "decimal" | "hhmm")}
               className="flex gap-6"
             >
               <div className="flex items-center gap-2">
@@ -340,10 +351,11 @@ function FieldCheck({
         id={id}
         checked={checked}
         onCheckedChange={onToggle}
+        disabled={disabled}
         className="mt-0.5"
       />
       <div>
-        <label htmlFor={id} className="text-sm font-medium cursor-pointer leading-none">
+        <label htmlFor={id} className={`text-sm font-medium leading-none ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}>
           {label}
         </label>
         <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
