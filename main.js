@@ -549,6 +549,15 @@ async function createWindow() {
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
+// Explicit AppUserModelID so Windows treats TimeTrack as its own application
+// for taskbar grouping, jump-list, and shortcut activation routing. Without
+// this, two unrelated Electron apps (e.g. TimeTrack + Expense Track) can be
+// treated as the same application by Windows and a launch of one is routed
+// to the other. Must match electron-builder `appId`.
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.timetrack.app');
+}
+
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
