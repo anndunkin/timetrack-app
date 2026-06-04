@@ -9,6 +9,7 @@ A Windows desktop time-tracking application built with Electron, Express, and Re
 - **Organizations → Departments → Projects** hierarchy
 - **Multi-department time entries** — log a single task against multiple departments; time is split equally across them in all reports
 - **Live timer** — start/stop a running timer on the Log Time page, then click "Use Time" to copy the elapsed time into the entry form
+- **Edit any entry** — the **History** page lists *all* time entries with date-range filtering and pagination, so you're no longer limited to the recent entries on the Log Time page. Click the pencil on any entry (however old) to open it in the same edit form used for recent entries
 - **Weekly view** — day-by-day breakdown with per-project summary sidebar
 - **Annual summary** — monthly bar chart, by-org/dept/project breakdowns, average per week and per month (both calculated over elapsed periods, not the full year)
 - **Budget tracking** — set optional budget hours per project; over-budget projects are highlighted
@@ -50,6 +51,37 @@ Double-click it to install on any Windows 10 / 11 x64 machine. The installer cre
 
 > The first run downloads Electron (~115 MB) and NSIS tools and may take several minutes.
 > No native modules are compiled at any point.
+
+---
+
+## Releasing
+
+Releases are built automatically by the **Release Windows Installer** GitHub Actions workflow
+(`.github/workflows/release.yml`), which runs on `windows-latest`.
+
+1. **Bump the version and update the changelog.**
+   - Update `"version"` in `package.json` (and `app/package.json` for consistency).
+   - Add a new section to `CHANGELOG.md` describing the release.
+2. **Push a `vX.Y.Z` tag** to trigger the workflow:
+   ```bash
+   git tag v1.3.0
+   git push origin v1.3.0
+   ```
+   The workflow runs `npm run make`, uploads the installer as a build artifact, and — because
+   the trigger is a tag — attaches the `.exe` to the GitHub Release for that tag.
+   You can also run it manually from the **Actions** tab via **workflow_dispatch** (this still
+   produces a build artifact, but does not create a Release).
+3. **For a SIGNED installer**, add two repository secrets (Settings → Secrets and variables →
+   Actions):
+   - `WINDOWS_CERT_BASE64` — your code-signing certificate (`.pfx`) encoded as base64, e.g.
+     `base64 -w0 cert.pfx` (Linux/macOS) or
+     `[Convert]::ToBase64String([IO.File]::ReadAllBytes("cert.pfx"))` (PowerShell).
+   - `WINDOWS_CERT_PASSWORD` — the password for that `.pfx`.
+
+   When these secrets are present the workflow decodes the certificate, sets electron-builder's
+   `CSC_LINK` / `CSC_KEY_PASSWORD`, and produces a **signed** installer. When they are absent the
+   workflow builds an **unsigned** installer (electron-builder skips signing when `CSC_LINK` is
+   unset, and `forceCodeSigning` stays `false`).
 
 ---
 
@@ -229,7 +261,7 @@ timetracker-electron/
 │   │   └── storage.ts   ← sql.js storage layer, DB migrations, switchDb()
 │   ├── client/
 │   │   └── src/
-│   │       ├── pages/   ← TimeEntryPage, WeeklyPage, AnnualPage, AdminPage, SettingsPage
+│   │       ├── pages/   ← TimeEntryPage, HistoryPage, WeeklyPage, AnnualPage, AdminPage, SettingsPage
 │   │       ├── lib/     ← queryClient, files.ts (IPC bridge), utils.ts (date helpers)
 │   │       └── components/
 │   ├── shared/
@@ -287,5 +319,6 @@ timetracker-electron/
 
 | Tag | Description |
 |-----|-------------|
+| v1.3.0 | **History page** — browse, filter (by date range), paginate, and edit *any* time entry, not just recent ones; paginated `GET /api/time-entries?page=&pageSize=` endpoint |
 | v1.1.0 | Multi-file support — native File menu (top menu bar) with create/open/switch; fix preload path bug; fix Annual dept list truncation |
 | v1.0 / v1.0.0 | Initial stable release — core time tracking, multi-dept entries, live timer, weekly/annual summaries, timezone-safe date handling |

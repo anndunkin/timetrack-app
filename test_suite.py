@@ -153,6 +153,98 @@ ute = next((e for e in allte if e["id"]==TEID1),{})
 ft("PUT updates minutes",          ute.get("minutes")==120)
 ft("PUT updates description",      ute.get("description")=="Lecture prep (extended)")
 
+# ── 5b. ENTRY HISTORY (pagination + edit-any-entry) ───────────────────────────
+print("\n── 5b. Entry History (pagination + edit any entry) ──")
+
+# Seed a batch of entries spread across several months so pagination and
+# date-range filtering have something to work with. The oldest of these acts
+# as a stand-in for an "old, non-recent" entry that must remain editable.
+HIST_IDS = []
+for i in range(1, 31):
+    mo = ((i - 1) % 6) + 1            # months 1..6
+    day = ((i - 1) % 27) + 1
+    _, he, _ = api("POST", "/api/time-entries",
+                   {"date": f"2025-{mo:02d}-{day:02d}", "minutes": 15 + i,
+                    "organizationId": OID1, "departmentIds": [DID1],
+                    "projectId": PID1, "description": f"History seed {i}"})
+    if isinstance(he, dict) and "id" in he:
+        HIST_IDS.append(he["id"])
+ft("Seeded 30 history entries", len(HIST_IDS) == 30, f"only {len(HIST_IDS)}")
+OLD_ENTRY_ID = min(HIST_IDS) if HIST_IDS else None  # earliest-created = oldest id
+
+# Paginated envelope shape
+_, pg1, _ = api("GET", "/api/time-entries?page=1&pageSize=10")
+ft("Paged response is envelope dict", isinstance(pg1, dict))
+ft("Envelope has entries array",      isinstance(pg1.get("entries"), list))
+ft("Envelope has total count",        isinstance(pg1.get("total"), int))
+ft("Page 1 returns pageSize rows",    len(pg1.get("entries", [])) == 10)
+ft("Total reflects all entries",      pg1.get("total", 0) >= 30)
+ft("Echoes page=1",                   pg1.get("page") == 1)
+ft("Echoes pageSize=10",              pg1.get("pageSize") == 10)
+
+# Page 2 is disjoint from page 1 (stable ordering, no overlap)
+_, pg2, _ = api("GET", "/api/time-entries?page=2&pageSize=10")
+ids1 = {e["id"] for e in pg1.get("entries", [])}
+ids2 = {e["id"] for e in pg2.get("entries", [])}
+ft("Page 2 distinct from page 1", len(ids1 & ids2) == 0 and len(ids2) == 10)
+
+# Ordering: entries are newest-date first
+dates_pg1 = [e["date"] for e in pg1.get("entries", [])]
+ft("Page 1 sorted by date DESC", dates_pg1 == sorted(dates_pg1, reverse=True))
+
+# pageSize clamping (>200 clamps to 200, <1 clamps to 1)
+_, pgbig, _ = api("GET", "/api/time-entries?page=1&pageSize=9999")
+ft("pageSize clamped to <=200", pgbig.get("pageSize", 0) <= 200)
+_, pgzero, _ = api("GET", "/api/time-entries?page=0&pageSize=0")
+ft("page clamped to >=1",       pgzero.get("page") == 1)
+ft("pageSize clamped to >=1",   pgzero.get("pageSize", 0) >= 1)
+
+# Date-range filter combined with pagination
+_, pgr, _ = api("GET", "/api/time-entries?start=2025-01-01&end=2025-02-28&page=1&pageSize=50")
+ft("Filtered+paged returns envelope", isinstance(pgr, dict) and isinstance(pgr.get("entries"), list))
+ft("Filtered total <= overall total", pgr.get("total", 0) <= pg1.get("total", 0))
+ft("Filtered rows within range",
+   all("2025-01-01" <= e["date"] <= "2025-02-28" for e in pgr.get("entries", [])))
+
+# Edit an OLD (non-recent) entry by id and confirm it persists
+if OLD_ENTRY_ID is not None:
+    s_edit, edited, _ = api("PUT", f"/api/time-entries/{OLD_ENTRY_ID}",
+        {"date": "2025-01-05", "minutes": 222, "organizationId": OID1,
+         "departmentIds": [DID1], "projectId": PID1,
+         "description": "Edited old entry"})
+    ft("Edit old entry → 200",        s_edit == 200)
+    ft("Edit old entry minutes",      isinstance(edited, dict) and edited.get("minutes") == 222)
+    ft("Edit old entry description",  isinstance(edited, dict) and edited.get("description") == "Edited old entry")
+    # Confirm via a fresh fetch (broad range so the edited entry is included)
+    _, allh, _ = api("GET", "/api/time-entries?start=2025-01-01&end=2025-12-31&page=1&pageSize=200")
+    found = next((e for e in allh.get("entries", []) if e["id"] == OLD_ENTRY_ID), {})
+    ft("Old-entry edit persisted in fetch", found.get("minutes") == 222)
+else:
+    for lbl in ["Edit old entry → 200", "Edit old entry minutes",
+                "Edit old entry description", "Old-entry edit persisted in fetch"]:
+        ft(lbl, False, "no old entry id")
+
+# Validation still enforced when editing an arbitrary entry
+if OLD_ENTRY_ID is not None:
+    s_bad, _, _ = api("PUT", f"/api/time-entries/{OLD_ENTRY_ID}",
+        {"date": "nope", "minutes": 30, "organizationId": OID1,
+         "departmentIds": [DID1], "projectId": PID1})
+    ft("Edit with bad date rejected (400)", s_bad == 400)
+    s_neg, _, _ = api("PUT", f"/api/time-entries/{OLD_ENTRY_ID}",
+        {"date": "2025-01-05", "minutes": -5, "organizationId": OID1,
+         "departmentIds": [DID1], "projectId": PID1})
+    ft("Edit with negative minutes rejected (400)", s_neg == 400)
+    s_empty, _, _ = api("PUT", f"/api/time-entries/{OLD_ENTRY_ID}",
+        {"date": "2025-01-05", "minutes": 30, "organizationId": OID1,
+         "departmentIds": [], "projectId": PID1})
+    ft("Edit with empty departmentIds rejected (400)", s_empty == 400)
+
+# Invalid / non-numeric id guard on the update endpoint
+s_invalid, _, _ = api("PUT", "/api/time-entries/abc",
+    {"date": "2025-01-05", "minutes": 30, "organizationId": OID1,
+     "departmentIds": [DID1], "projectId": PID1})
+ft("Edit with non-numeric id rejected (400)", s_invalid == 400)
+
 # ── 6. RECURRING TASKS ────────────────────────────────────────────────────────
 print("\n── 6. Recurring Tasks ──")
 _, rt1, _ = api("POST", "/api/recurring",
@@ -327,6 +419,31 @@ for name in injects:
 
 _, orgs_after, _ = req("GET", "/api/organizations")
 st("DB intact after injection probes", isinstance(orgs_after,list) and len(orgs_after)>=1)
+
+# Injection probes against the History pagination/date-range query params.
+# Malicious strings must not 500 or alter/leak data — params are bound, not
+# string-concatenated. Numeric params coerce to safe defaults; the date filter
+# is bound as a literal so it simply matches nothing.
+from urllib.parse import quote
+for bad in ["1; DROP TABLE time_entries; --", "1 OR 1=1", "abc", "-1"]:
+    s, _, _ = req("GET", f"/api/time-entries?page={quote(bad)}&pageSize=5")
+    st(f"History page param safe: {bad[:30]}", s == 200)
+# The date filter is a BOUND literal, so an injected "' OR '1'='1" is compared
+# as a plain string — it is never executed as SQL. It must (a) never 500,
+# (b) never drop the table, and (c) never return MORE rows than the full
+# unfiltered total (i.e. it can't bypass the WHERE to leak everything).
+_, full_te, _ = req("GET", "/api/time-entries?page=1&pageSize=1")
+overall_total = full_te.get("total", 0) if isinstance(full_te, dict) else 0
+for bad in ["2025-01-01' OR '1'='1", "'; DROP TABLE time_entries; --"]:
+    s, d, _ = req("GET", f"/api/time-entries?start={quote(bad)}&end=2025-12-31&page=1&pageSize=5")
+    st(f"History date filter safe: {bad[:30]}",
+       s == 200 and isinstance(d, dict)
+       and isinstance(d.get("total"), int)
+       and d.get("total") <= overall_total)
+_, te_intact, _ = req("GET", "/api/time-entries?page=1&pageSize=1")
+st("time_entries table intact after probes",
+   isinstance(te_intact, dict) and isinstance(te_intact.get("entries"), list)
+   and te_intact.get("total", 0) >= 30)
 
 # ── F. 404 HANDLING ───────────────────────────────────────────────────────────
 print("\n── F. Not-Found Handling ──")

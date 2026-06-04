@@ -91,7 +91,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // -- Time Entries --
   app.get("/api/time-entries", (req, res) => {
-    const { start, end } = req.query as { start?: string; end?: string };
+    const { start, end, page, pageSize } = req.query as {
+      start?: string; end?: string; page?: string; pageSize?: string;
+    };
+
+    // Paginated mode: when `page` (or `pageSize`) is supplied, return an
+    // envelope { entries, total, page, pageSize } so the History view can
+    // page through ALL entries — optionally constrained by a date range.
+    if (page !== undefined || pageSize !== undefined) {
+      const p  = Math.max(1, Number(page) || 1);
+      const ps = Math.min(200, Math.max(1, Number(pageSize) || 25));
+      const { entries, total } = storage.getTimeEntriesPage({
+        start: start || undefined,
+        end: end || undefined,
+        limit: ps,
+        offset: (p - 1) * ps,
+      });
+      return res.json({ entries, total, page: p, pageSize: ps });
+    }
+
     if (start && end) {
       return res.json(storage.getTimeEntriesByDateRange(start, end));
     }
@@ -103,9 +121,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(storage.createTimeEntry(parsed.data));
   });
   app.put("/api/time-entries/:id", (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid id" });
     const parsed = insertTimeEntrySchema.safeParse(req.body);
     if (!parsed.success) return zodError(res, parsed.error);
-    const result = storage.updateTimeEntry(Number(req.params.id), parsed.data);
+    const result = storage.updateTimeEntry(id, parsed.data);
     if (!result) return res.status(404).json({ error: "Not found" });
     res.json(result);
   });
