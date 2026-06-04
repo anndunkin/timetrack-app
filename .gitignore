@@ -8,3 +8,9 @@ app/timetracker.db
 build/*.pfx
 build/*.pem
 *.db
+# Local/runtime databases and accidental AppData captures
+*.db
+*.sqlite
+*.sqlite3
+AppData/
+**/AppData/**
