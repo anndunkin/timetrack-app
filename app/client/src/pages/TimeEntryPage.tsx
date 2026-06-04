@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -51,7 +52,11 @@ function formatElapsed(seconds: number): string {
 
 export default function TimeEntryPage() {
   const { toast } = useToast();
+  const search = useSearch(); // query portion of the hash route, e.g. "edit=42"
   const [editId, setEditId] = useState<number | null>(null);
+  // Edit id requested via deep link (?edit=<id>) that is still waiting to be
+  // applied — used when navigation arrives before `entries` have loaded.
+  const [pendingEditId, setPendingEditId] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
 
   // ── Recurring UI state ───────────────────────────────────────────────────────
@@ -125,28 +130,45 @@ export default function TimeEntryPage() {
   }, [orgs.length]);
 
   // Deep-link edit: the History page navigates to "/?edit=<id>" to open a
-  // specific (possibly old) entry in this exact same inline edit form. Once
-  // entries have loaded, find the requested entry, open it for editing, then
-  // strip the query param so a refresh doesn't re-trigger the edit.
+  // specific (possibly old) entry in this exact same inline edit form.
+  //
+  // Trigger on the hash SEARCH string (via wouter's useSearch), NOT on the
+  // `entries` array. The entries list usually keeps the same reference across
+  // navigation (it's React Query cache), so keying on it never re-fired the
+  // effect for older or repeat edits. Keying on the search string fires every
+  // time we navigate to "/?edit=<id>", for any id, every time.
   useEffect(() => {
-    if (entries.length === 0) return;
-    const hash = window.location.hash; // e.g. "#/?edit=42"
-    const qIndex = hash.indexOf("?");
-    if (qIndex === -1) return;
-    const params = new URLSearchParams(hash.slice(qIndex + 1));
+    const params = new URLSearchParams(search);
     const editParam = params.get("edit");
     if (!editParam) return;
     const id = Number(editParam);
-    const target = entries.find(e => e.id === id);
+    if (!Number.isInteger(id) || id <= 0) return;
+    // Stash the requested id; the apply-effect below opens it once entries are
+    // loaded (handles the race where navigation beats the time-entries fetch).
+    setPendingEditId(id);
+    // Strip the query param immediately so a refresh doesn't re-trigger and so
+    // a second consecutive deep-link edit produces a fresh `search` change.
+    // wouter's hash-location navigate writes the query to the real URL search
+    // (location.search), not the hash, so clear search while keeping the hash.
+    history.replaceState(null, "", location.pathname + location.hash);
+  }, [search]);
+
+  // Apply a pending deep-link edit once entries are available. Runs when either
+  // the pending id or the loaded entries change, so it works whether entries
+  // were already cached (apply now) or arrive afterward (apply on load).
+  useEffect(() => {
+    if (pendingEditId === null) return;
+    if (entries.length === 0) return;
+    const target = entries.find(e => e.id === pendingEditId);
     if (target) {
       startEdit(target);
       window.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      toast({ title: "Entry not found", variant: "destructive" });
     }
-    // Clear the query param from the hash without reloading.
-    const base = hash.slice(0, qIndex);
-    history.replaceState(null, "", base || "#/");
+    setPendingEditId(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries]);
+  }, [pendingEditId, entries]);
 
   // ── Timer logic ──────────────────────────────────────────────────────────────
   function startTimer() {

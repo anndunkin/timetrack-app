@@ -224,6 +224,25 @@ else:
                 "Edit old entry description", "Old-entry edit persisted in fetch"]:
         ft(lbl, False, "no old entry id")
 
+# Regression (History → deep-link edit): the Log Time page opens a deep-linked
+# edit by calling entries.find(id) over the UNPAGINATED GET /api/time-entries
+# (no query params). That list MUST contain old, non-recent entries — i.e. ones
+# beyond the 20 shown in the "Recent Entries" sidebar — or find() returns
+# undefined and the edit form silently never opens (the original bug). Assert
+# the no-param endpoint returns the full list AND contains the oldest seeded id.
+if OLD_ENTRY_ID is not None:
+    _, full_list, _ = api("GET", "/api/time-entries")
+    ft("Unpaginated GET returns a plain array", isinstance(full_list, list))
+    ft("Unpaginated GET returns full list (>=30 seeded)",
+       isinstance(full_list, list) and len(full_list) >= 30,
+       f"only {len(full_list) if isinstance(full_list, list) else 'n/a'}")
+    # The oldest seeded entry sits well beyond the 20-row recent window.
+    idx = next((i for i, e in enumerate(full_list) if e["id"] == OLD_ENTRY_ID), -1) \
+        if isinstance(full_list, list) else -1
+    ft("Old entry present in unpaginated list (find() can locate it)", idx >= 0)
+    ft("Old entry is beyond the recent-20 window (truly non-recent)", idx >= 20,
+       f"index {idx}")
+
 # Validation still enforced when editing an arbitrary entry
 if OLD_ENTRY_ID is not None:
     s_bad, _, _ = api("PUT", f"/api/time-entries/{OLD_ENTRY_ID}",
