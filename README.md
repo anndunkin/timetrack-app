@@ -9,6 +9,7 @@ A Windows desktop time-tracking application built with Electron, Express, and Re
 - **Organizations → Departments → Projects** hierarchy
 - **Multi-department time entries** — log a single task against multiple departments; time is split equally across them in all reports
 - **Live timer** — start/stop a running timer on the Log Time page, then click "Use Time" to copy the elapsed time into the entry form
+- **Edit any entry** — the **History** page lists *all* time entries with date-range filtering and pagination, so you're no longer limited to the recent entries on the Log Time page. Click the pencil on any entry (however old) to open it in the same edit form used for recent entries
 - **Weekly view** — day-by-day breakdown with per-project summary sidebar
 - **Annual summary** — monthly bar chart, by-org/dept/project breakdowns, average per week and per month (both calculated over elapsed periods, not the full year)
 - **Budget tracking** — set optional budget hours per project; over-budget projects are highlighted
@@ -229,7 +230,7 @@ timetracker-electron/
 │   │   └── storage.ts   ← sql.js storage layer, DB migrations, switchDb()
 │   ├── client/
 │   │   └── src/
-│   │       ├── pages/   ← TimeEntryPage, WeeklyPage, AnnualPage, AdminPage, SettingsPage
+│   │       ├── pages/   ← TimeEntryPage, HistoryPage, WeeklyPage, AnnualPage, AdminPage, SettingsPage
 │   │       ├── lib/     ← queryClient, files.ts (IPC bridge), utils.ts (date helpers)
 │   │       └── components/
 │   ├── shared/
@@ -287,5 +288,6 @@ timetracker-electron/
 
 | Tag | Description |
 |-----|-------------|
+| (unreleased) | **History page** — browse, filter (by date range), paginate, and edit *any* time entry, not just recent ones; paginated `GET /api/time-entries?page=&pageSize=` endpoint |
 | v1.1.0 | Multi-file support — native File menu (top menu bar) with create/open/switch; fix preload path bug; fix Annual dept list truncation |
 | v1.0 / v1.0.0 | Initial stable release — core time tracking, multi-dept entries, live timer, weekly/annual summaries, timezone-safe date handling |

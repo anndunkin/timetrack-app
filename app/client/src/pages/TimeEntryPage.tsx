@@ -124,6 +124,30 @@ export default function TimeEntryPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgs.length]);
 
+  // Deep-link edit: the History page navigates to "/?edit=<id>" to open a
+  // specific (possibly old) entry in this exact same inline edit form. Once
+  // entries have loaded, find the requested entry, open it for editing, then
+  // strip the query param so a refresh doesn't re-trigger the edit.
+  useEffect(() => {
+    if (entries.length === 0) return;
+    const hash = window.location.hash; // e.g. "#/?edit=42"
+    const qIndex = hash.indexOf("?");
+    if (qIndex === -1) return;
+    const params = new URLSearchParams(hash.slice(qIndex + 1));
+    const editParam = params.get("edit");
+    if (!editParam) return;
+    const id = Number(editParam);
+    const target = entries.find(e => e.id === id);
+    if (target) {
+      startEdit(target);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    // Clear the query param from the hash without reloading.
+    const base = hash.slice(0, qIndex);
+    history.replaceState(null, "", base || "#/");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries]);
+
   // ── Timer logic ──────────────────────────────────────────────────────────────
   function startTimer() {
     if (timerRunning) return;

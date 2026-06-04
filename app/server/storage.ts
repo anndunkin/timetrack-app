@@ -545,6 +545,7 @@ export interface IStorage {
 
   getTimeEntries(): TimeEntry[];
   getTimeEntriesByDateRange(start: string, end: string): TimeEntry[];
+  getTimeEntriesPage(opts: { start?: string; end?: string; limit: number; offset: number }): { entries: TimeEntry[]; total: number };
   createTimeEntry(data: InsertTimeEntry): TimeEntry;
   updateTimeEntry(id: number, data: InsertTimeEntry): TimeEntry | undefined;
   deleteTimeEntry(id: number): void;
@@ -764,6 +765,29 @@ export const storage: IStorage = {
       "SELECT * FROM time_entries WHERE date >= ? AND date <= ? ORDER BY date DESC",
       [start, end],
     ).map(mapTimeEntry);
+  },
+  getTimeEntriesPage({ start, end, limit, offset }) {
+    // Build an optional date-range WHERE clause shared by the count and page
+    // queries so the total reflects the same filter as the returned rows.
+    const where: string[] = [];
+    const params: (string | number)[] = [];
+    if (start) { where.push("date >= ?"); params.push(start); }
+    if (end)   { where.push("date <= ?"); params.push(end); }
+    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+    const totalRow = first<{ count: number }>(
+      `SELECT COUNT(*) AS count FROM time_entries ${whereSql}`, params,
+    );
+    const total = totalRow?.count ?? 0;
+
+    const entries = all<Record<string, unknown>>(
+      // Secondary sort by id keeps ordering stable for entries sharing a date,
+      // so pagination never skips or duplicates rows across pages.
+      `SELECT * FROM time_entries ${whereSql} ORDER BY date DESC, id DESC LIMIT ? OFFSET ?`,
+      [...params, limit, offset],
+    ).map(mapTimeEntry);
+
+    return { entries, total };
   },
   createTimeEntry(data) {
     // Store the first dept in the legacy column for backward compat, and the

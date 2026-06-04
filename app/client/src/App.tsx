@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "./components/ThemeProvider";
 import Layout from "./components/Layout";
 import TimeEntryPage from "./pages/TimeEntryPage";
+import HistoryPage from "./pages/HistoryPage";
 import WeeklyPage from "./pages/WeeklyPage";
 import MonthlyPage from "./pages/MonthlyPage";
 import AnnualPage from "./pages/AnnualPage";
@@ -22,6 +23,7 @@ export default function App() {
           <Layout>
             <Switch>
               <Route path="/" component={TimeEntryPage} />
+              <Route path="/history" component={HistoryPage} />
               <Route path="/weekly" component={WeeklyPage} />
               <Route path="/monthly" component={MonthlyPage} />
               <Route path="/annual" component={AnnualPage} />
