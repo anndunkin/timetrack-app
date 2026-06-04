@@ -51,7 +51,10 @@ jobs:
         env:
           CSC_LINK: ${{ steps.signing.outputs.csc_link }}
           CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
-        run: npm run make
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm run build-app
+          npx electron-builder --win --x64 --publish never
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
