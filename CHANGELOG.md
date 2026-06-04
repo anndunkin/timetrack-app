@@ -4,6 +4,19 @@ All notable changes to TimeTrack are documented here.
 
 ---
 
+## [1.3.0] — 2026-06-03
+
+### Added
+- **Edit any time entry from a new History page** — a dedicated History page lets you browse and manage every recorded entry, not just the most recent ones.
+  - Date-range filter (start/end) plus pagination and a running total-count display, so large datasets stay navigable.
+  - **Edit** and **Delete** actions on *every* entry, not only the recent ones surfaced on the main view.
+  - Editing reuses the existing inline edit form via a `/?edit=<id>` deep link, giving a single, consistent editing experience.
+  - New paginated API: `GET /api/time-entries?page=&pageSize=[&start=&end=]`. Responses remain backward-compatible plain arrays, so existing callers continue to work unchanged.
+  - Security hardening: parameterized SQL (no string interpolation), bounded pagination limits, and re-validation of incoming data against the schema.
+- 138/138 tests passing.
+
+---
+
 ## [1.2.2] — 2026-05-09
 
 ### Fixed
