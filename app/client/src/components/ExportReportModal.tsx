@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button }   from "@/components/ui/button";
 import { Label }    from "@/components/ui/label";
+import { Input }    from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -95,6 +96,9 @@ export default function ExportReportModal({
   const [orgId,   setOrgId]   = useState<string>("");
   const [year,    setYear]    = useState(defaultYear);
   const [month,   setMonth]   = useState(defaultMonth);
+  const [mode,    setMode]    = useState<"monthly" | "custom">("monthly");
+  const [start,   setStart]   = useState("");
+  const [end,     setEnd]     = useState("");
   const [loading, setLoading] = useState(false);
 
   // Default orgId to first org once loaded
@@ -102,10 +106,15 @@ export default function ExportReportModal({
     if (orgs.length > 0 && !orgId) setOrgId(String(orgs[0].id));
   }, [orgs]);
 
-  // Sync year/month from parent when modal opens fresh
+  // Sync year/month from parent when modal opens fresh, and seed the custom
+  // range with the selected month so it starts from a sensible default.
   useEffect(() => {
     setYear(defaultYear);
     setMonth(defaultMonth);
+    const last = new Date(defaultYear, defaultMonth, 0).getDate();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    setStart(`${defaultYear}-${pad(defaultMonth)}-01`);
+    setEnd(`${defaultYear}-${pad(defaultMonth)}-${pad(last)}`);
   }, [defaultYear, defaultMonth]);
 
   function toggleField(key: keyof ReportFields) {
@@ -119,12 +128,27 @@ export default function ExportReportModal({
       return;
     }
 
+    if (mode === "custom") {
+      if (!start || !end) {
+        toast({ title: "Select a start and end date", variant: "destructive" });
+        return;
+      }
+      if (start > end) {
+        toast({ title: "Start date must be on or before end date", variant: "destructive" });
+        return;
+      }
+    }
+
+    const body = mode === "custom"
+      ? { orgId: Number(orgId), start, end, fields, timeFormat }
+      : { orgId: Number(orgId), year, month, fields, timeFormat };
+
     setLoading(true);
     try {
       const resp = await fetch("/api/report/monthly", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: Number(orgId), year, month, fields, timeFormat }),
+        body: JSON.stringify(body),
       });
 
       if (!resp.ok) {
@@ -144,7 +168,10 @@ export default function ExportReportModal({
       const base64 = btoa(binary);
 
       const org  = orgs.find(o => o.id === Number(orgId));
-      const name = `TimeTrack-${(org?.name ?? "Report").replace(/\s+/g, "-")}-${year}-${String(month).padStart(2,"0")}.pdf`;
+      const slug = (org?.name ?? "Report").replace(/\s+/g, "-");
+      const name = mode === "custom"
+        ? `TimeTrack-${slug}-${start}_to_${end}.pdf`
+        : `TimeTrack-${slug}-${year}-${String(month).padStart(2,"0")}.pdf`;
 
       // Send to main process — writes to temp dir and opens in system PDF viewer
       const result = await (window as any).timetrackFiles.openPdf({ base64, filename: name });
@@ -169,7 +196,7 @@ export default function ExportReportModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileDown size={18} />
-            Export Monthly Report
+            Export Report
           </DialogTitle>
         </DialogHeader>
 
@@ -208,31 +235,75 @@ export default function ExportReportModal({
             </Select>
           </div>
 
-          {/* ── Month / Year ─────────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Month</Label>
-              <Select value={String(month)} onValueChange={v => setMonth(Number(v))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {MONTH_NAMES_LONG.map((name, i) => (
-                    <SelectItem key={i + 1} value={String(i + 1)}>{name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Year</Label>
-              <Select value={String(year)} onValueChange={v => setYear(Number(v))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {YEAR_RANGE.map(y => (
-                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          {/* ── Report period mode ───────────────────────────────────────── */}
+          <div className="space-y-1.5">
+            <Label>Report period</Label>
+            <RadioGroup
+              value={mode}
+              onValueChange={v => setMode(v as "monthly" | "custom")}
+              className="flex gap-6"
+            >
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="monthly" id="mode-monthly" />
+                <Label htmlFor="mode-monthly" className="font-normal cursor-pointer">Monthly</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="custom" id="mode-custom" />
+                <Label htmlFor="mode-custom" className="font-normal cursor-pointer">Custom range</Label>
+              </div>
+            </RadioGroup>
           </div>
+
+          {/* ── Month / Year (monthly mode) ──────────────────────────────── */}
+          {mode === "monthly" ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Month</Label>
+                <Select value={String(month)} onValueChange={v => setMonth(Number(v))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {MONTH_NAMES_LONG.map((name, i) => (
+                      <SelectItem key={i + 1} value={String(i + 1)}>{name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Year</Label>
+                <Select value={String(year)} onValueChange={v => setYear(Number(v))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {YEAR_RANGE.map(y => (
+                      <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="report-start">Start date</Label>
+                <Input
+                  id="report-start"
+                  type="date"
+                  value={start}
+                  max={end || undefined}
+                  onChange={e => setStart(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="report-end">End date</Label>
+                <Input
+                  id="report-end"
+                  type="date"
+                  value={end}
+                  min={start || undefined}
+                  onChange={e => setEnd(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
 
           <Separator />
 

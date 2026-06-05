@@ -27,6 +27,18 @@ def req(method, path, body=None):
         except: parsed = raw
         return e.code, parsed, hdr
 
+def req_bytes(method, path, body=None):
+    """Like req() but returns the raw response body as bytes (for PDF/binary)."""
+    url = BASE + path
+    data = json.dumps(body).encode() if body is not None else None
+    hdrs = {"Content-Type":"application/json"} if data else {}
+    r = urllib.request.Request(url, data=data, method=method, headers=hdrs)
+    try:
+        with urllib.request.urlopen(r, timeout=30) as resp:
+            return resp.status, resp.read(), dict(resp.headers)
+    except urllib.error.HTTPError as e:
+        return e.code, e.read(), dict(e.headers)
+
 def ft(name, ok, detail=""):
     outcome = "PASS" if ok else "FAIL"
     func_results.append((outcome, name, detail))
@@ -295,6 +307,70 @@ monthly = [e for e in after if e.get("description")=="Monthly report"]
 ft("Monthly recurrence generated ≥3 past entries", len(monthly)>=3)
 print(f"  [INFO] Monthly recurring generated {len(monthly)} entries (Jan–Apr)")
 
+# ── 6b. REPORTS (monthly + custom date range) ─────────────────────────────────
+print("\n── 6b. Reports (monthly + custom date range) ──")
+
+REPORT_FIELDS = {"summary":True,"projectBreakdown":True,"departmentBreakdown":True,
+                 "dailyLog":True,"descriptions":True,"budgetComparison":True}
+
+def is_pdf(status, body, hdr):
+    return (status == 200
+            and hdr.get("Content-Type","").startswith("application/pdf")
+            and isinstance(body, (bytes, bytearray)) and len(body) > 0
+            and body[:4] == b"%PDF")
+
+# Monthly path still works unchanged (regression). April 2026 has OID1 entries.
+s, b, h = req_bytes("POST", "/api/report/monthly",
+    {"orgId":OID1,"year":2026,"month":4,"fields":REPORT_FIELDS,"timeFormat":"decimal"})
+ft("Monthly report → 200 application/pdf (non-empty)", is_pdf(s,b,h))
+ft("Monthly report filename has year-month",
+   "2026-04.pdf" in h.get("Content-Disposition",""), h.get("Content-Disposition",""))
+
+# Custom range, mid-month to mid-next-month, spanning seeded 2025 entries.
+s, b, h = req_bytes("POST", "/api/report/monthly",
+    {"orgId":OID1,"start":"2025-01-05","end":"2025-02-15","fields":REPORT_FIELDS,"timeFormat":"decimal"})
+ft("Custom range report → 200 application/pdf (non-empty)", is_pdf(s,b,h))
+ft("Custom range filename uses start_to_end",
+   "2025-01-05_to_2025-02-15.pdf" in h.get("Content-Disposition",""), h.get("Content-Disposition",""))
+
+# Custom range only includes entries within range: pick a window that excludes
+# the April 2026 entries. Compare against the date-range API for the same window.
+_, in_range, _ = api("GET", "/api/time-entries?start=2025-01-05&end=2025-02-15")
+in_range_oid1 = [e for e in in_range if e.get("organizationId")==OID1]
+ft("Range window has only in-range OID1 entries",
+   all("2025-01-05" <= e["date"] <= "2025-02-15" for e in in_range_oid1)
+   and not any(e["date"]=="2026-04-01" for e in in_range_oid1))
+
+# The alias route /api/report also works with a custom range.
+s, b, h = req_bytes("POST", "/api/report",
+    {"orgId":OID1,"start":"2025-01-01","end":"2025-03-31","fields":REPORT_FIELDS,"timeFormat":"hhmm"})
+ft("Alias /api/report custom range → PDF", is_pdf(s,b,h))
+
+# Multi-month range spanning a full quarter succeeds.
+s, b, h = req_bytes("POST", "/api/report/monthly",
+    {"orgId":OID1,"start":"2025-01-01","end":"2025-03-31","fields":REPORT_FIELDS,"timeFormat":"decimal"})
+ft("Quarter-spanning range → PDF", is_pdf(s,b,h))
+
+# Validation: start > end → 400.
+s, b, h = req_bytes("POST", "/api/report/monthly",
+    {"orgId":OID1,"start":"2025-03-01","end":"2025-01-01","fields":REPORT_FIELDS})
+ft("Custom range start>end rejected (400)", s == 400)
+
+# Validation: invalid date format → 400.
+s, b, h = req_bytes("POST", "/api/report/monthly",
+    {"orgId":OID1,"start":"2025-13-99","end":"2025-12-31","fields":REPORT_FIELDS})
+ft("Custom range invalid date rejected (400)", s == 400)
+
+# Validation: missing fields → 400.
+s, b, h = req_bytes("POST", "/api/report/monthly",
+    {"orgId":OID1,"start":"2025-01-01","end":"2025-02-01"})
+ft("Report missing fields rejected (400)", s == 400)
+
+# Validation: only one of start/end supplied → 400.
+s, b, h = req_bytes("POST", "/api/report/monthly",
+    {"orgId":OID1,"start":"2025-01-01","fields":REPORT_FIELDS})
+ft("Report with only start (no end) rejected (400)", s == 400)
+
 # ── 7. ORG EXPORT ─────────────────────────────────────────────────────────────
 print("\n── 7. Org Export ──")
 EPATH = "/tmp/test-org-export.db"
@@ -463,6 +539,20 @@ _, te_intact, _ = req("GET", "/api/time-entries?page=1&pageSize=1")
 st("time_entries table intact after probes",
    isinstance(te_intact, dict) and isinstance(te_intact.get("entries"), list)
    and te_intact.get("total", 0) >= 30)
+
+# Report custom-range start/end are validated as strict YYYY-MM-DD and bound as
+# parameters in the storage query. An injection probe must be rejected at the
+# validation layer (400) — it is never executed as SQL and never reaches the DB.
+RPT_FIELDS = {"summary":True,"projectBreakdown":True,"departmentBreakdown":True,
+              "dailyLog":True,"descriptions":True,"budgetComparison":True}
+for bad in ["2025-01-01' OR '1'='1", "'; DROP TABLE time_entries; --", "2025-01-01; DROP TABLE time_entries"]:
+    s, _, _ = req("POST", "/api/report/monthly",
+                  {"orgId":OID1,"start":bad,"end":"2025-12-31","fields":RPT_FIELDS})
+    st(f"Report date injection rejected (literal, 400): {bad[:30]}", s == 400)
+# Confirm the table is still intact and populated after the report probes.
+_, te_after_rpt, _ = req("GET", "/api/time-entries?page=1&pageSize=1")
+st("time_entries intact after report injection probes",
+   isinstance(te_after_rpt, dict) and te_after_rpt.get("total", 0) >= 30)
 
 # ── F. 404 HANDLING ───────────────────────────────────────────────────────────
 print("\n── F. Not-Found Handling ──")

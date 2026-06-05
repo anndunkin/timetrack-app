@@ -12,6 +12,7 @@ A Windows desktop time-tracking application built with Electron, Express, and Re
 - **Edit any entry** — the **History** page lists *all* time entries with date-range filtering and pagination, so you're no longer limited to the recent entries on the Log Time page. Click the pencil on any entry (however old) to open it in the same edit form used for recent entries
 - **Weekly view** — day-by-day breakdown with per-project summary sidebar
 - **Annual summary** — monthly bar chart, by-org/dept/project breakdowns, average per week and per month (both calculated over elapsed periods, not the full year)
+- **PDF reports for any date range** — generate a polished PDF report (summary totals, project/department breakdowns, daily log) for a calendar month *or* an arbitrary custom date range (e.g. mid-month to mid-next-month, or a full quarter). Switch between **Monthly** and **Custom range** in the Export Report dialog; custom reports show the date range in the title
 - **Budget tracking** — set optional budget hours per project; over-budget projects are highlighted
 - **Custom fiscal year** — configure any start month and day in Settings
 - **Multi-file support** — create, open, and switch between database files at runtime via the native **File** menu

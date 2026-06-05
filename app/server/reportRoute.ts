@@ -1,13 +1,16 @@
 /**
- * Monthly Report PDF generation
- * POST /api/report/monthly
+ * Report PDF generation
+ * POST /api/report/monthly  (also aliased as POST /api/report)
  *
- * Body:
+ * Body (monthly mode):
  *   orgId        number          – which organisation to report on
  *   year         number
  *   month        number          – 1-12
  *   fields       ReportFields    – which sections to include
  *   timeFormat   "hhmm" | "decimal"
+ *
+ * Body (custom-range mode): pass `start` and `end` (ISO YYYY-MM-DD) instead of
+ *   year/month. The report then covers that arbitrary inclusive date range.
  */
 
 import PDFDocument from "pdfkit";
@@ -81,16 +84,28 @@ function monthRange(year: number, month: number): { start: string; end: string }
   };
 }
 
-function monthDays(year: number, month: number): string[] {
-  const { start, end } = monthRange(year, month);
+/** Enumerate every day (inclusive) between two YYYY-MM-DD dates, ordered ascending. */
+function daysBetween(start: string, end: string): string[] {
   const days: string[] = [];
   const d = new Date(start + "T00:00:00");
   const last = new Date(end + "T00:00:00");
   while (d <= last) {
-    days.push(d.toISOString().slice(0, 10));
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    days.push(`${y}-${m}-${dd}`);
     d.setDate(d.getDate() + 1);
   }
   return days;
+}
+
+/** True when `s` is a real calendar date in strict YYYY-MM-DD form. */
+function isValidIsoDate(s: unknown): s is string {
+  if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [y, m, d] = s.split("-").map(Number);
+  if (m < 1 || m > 12 || d < 1 || d > 31) return false;
+  const dt = new Date(s + "T00:00:00");
+  return dt.getFullYear() === y && dt.getMonth() + 1 === m && dt.getDate() === d;
 }
 
 function formatDate(iso: string): string {
@@ -112,22 +127,30 @@ const BG     = "#f9fafb";
 
 // ── PDF builder ───────────────────────────────────────────────────────────────
 
+interface ReportRange {
+  start: string;            // YYYY-MM-DD inclusive
+  end: string;              // YYYY-MM-DD inclusive
+  mode: "monthly" | "custom";
+  /** Used only in monthly mode to render "<Month> <Year>". */
+  year?: number;
+  month?: number;
+}
+
 export function buildMonthlyReportPdf(
   res: Response,
   orgId: number,
-  year: number,
-  month: number,
+  range: ReportRange,
   fields: ReportFields,
   timeFormat: "hhmm" | "decimal"
 ): void {
   const fmt = timeFormat === "hhmm" ? fmtHHMM : fmtDecimal;
+  const { start, end, mode } = range;
 
   // ── Gather data ─────────────────────────────────────────────────────────────
   const orgs     = storage.getOrganizations();
   const org      = orgs.find(o => o.id === orgId);
   if (!org) { res.status(404).json({ error: "Organisation not found" }); return; }
 
-  const { start, end } = monthRange(year, month);
   const allEntries  = storage.getTimeEntriesByDateRange(start, end);
 
   // Normalise departmentIds
@@ -149,7 +172,7 @@ export function buildMonthlyReportPdf(
 
   const depts    = storage.getDepartments();
   const projects = storage.getProjects();
-  const days     = monthDays(year, month);
+  const days     = daysBetween(start, end);
 
   const deptName = (id: number) => depts.find(d => d.id === id)?.name ?? "—";
   const projName = (id: number) => projects.find(p => p.id === id)?.name ?? "—";
@@ -196,15 +219,27 @@ export function buildMonthlyReportPdf(
   }
   const activeDays = days.filter(d => (byDay[d] ?? []).length > 0);
 
+  // ── Title / header / filename — monthly vs custom range ──────────────────────
+  const orgSlug = org.name.replace(/\s+/g, "-");
+  const headerTitle = mode === "monthly"
+    ? `Monthly Time Report  ·  ${MONTH_NAMES[(range.month ?? 1) - 1]} ${range.year}`
+    : `Time Report  ·  ${formatDate(start)} – ${formatDate(end)}`;
+  const pdfTitle = mode === "monthly"
+    ? `TimeTrack Monthly Report — ${org.name} — ${MONTH_NAMES[(range.month ?? 1) - 1]} ${range.year}`
+    : `TimeTrack Time Report — ${org.name} — ${start} to ${end}`;
+  const filename = mode === "monthly"
+    ? `TimeTrack-${orgSlug}-${range.year}-${String(range.month).padStart(2, "0")}.pdf`
+    : `TimeTrack-${orgSlug}-${start}_to_${end}.pdf`;
+
   // ── Create PDF ──────────────────────────────────────────────────────────────
   const doc = new PDFDocument({
     size:        "LETTER",
     bufferPages: true,
     margins: { top: MARGIN, bottom: MARGIN + 20, left: MARGIN, right: MARGIN },
     info: {
-      Title:    `TimeTrack Monthly Report — ${org.name} — ${MONTH_NAMES[month - 1]} ${year}`,
+      Title:    pdfTitle,
       Author:   "TimeTrack",
-      Subject:  "Monthly Time Report",
+      Subject:  mode === "monthly" ? "Monthly Time Report" : "Time Report",
       Creator:  "TimeTrack",
     },
   });
@@ -212,7 +247,7 @@ export function buildMonthlyReportPdf(
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader(
     "Content-Disposition",
-    `attachment; filename="TimeTrack-${org.name.replace(/\s+/g, "-")}-${year}-${String(month).padStart(2,"0")}.pdf"`
+    `attachment; filename="${filename}"`
   );
   doc.pipe(res);
 
@@ -310,7 +345,7 @@ export function buildMonthlyReportPdf(
      .text(org.name, MARGIN, y);
   y += 26;
   doc.fontSize(12).fillColor(MUTED).font("Helvetica")
-     .text(`Monthly Time Report  ·  ${MONTH_NAMES[month - 1]} ${year}`, MARGIN, y);
+     .text(headerTitle, MARGIN, y);
   y += 14;
   doc.fontSize(8).fillColor(MUTED).font("Helvetica")
      .text(`${formatDate(start)} – ${formatDate(end)}  ·  Generated ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`, MARGIN, y);
@@ -464,13 +499,13 @@ export function buildMonthlyReportPdf(
   // FOOTER (on every page) — must run after all content, before doc.end()
   // ══════════════════════════════════════════════════════════════════════════
 
-  const range = doc.bufferedPageRange();
-  const totalPages = range.count;
+  const pageRange = doc.bufferedPageRange();
+  const totalPages = pageRange.count;
   const footerText = (n: number) =>
     `Generated by TimeTrack  ·  Ann Dunkin — Dunkin Global Advisors  ·  Page ${n} of ${totalPages}`;
 
   for (let i = 0; i < totalPages; i++) {
-    doc.switchToPage(range.start + i);
+    doc.switchToPage(pageRange.start + i);
     // Draw footer rule using canvas save/restore (avoids triggering auto page breaks)
     doc.save();
     doc.moveTo(MARGIN, PAGE_H - 34)
@@ -490,31 +525,57 @@ export function buildMonthlyReportPdf(
 // ── Route registration ────────────────────────────────────────────────────────
 
 export function registerReportRoute(app: Express): void {
-  app.post("/api/report/monthly", (req, res) => {
+  const handler = (req: any, res: Response) => {
     const {
       orgId,
       year,
       month,
+      start,
+      end,
       fields,
       timeFormat = "decimal",
     } = req.body as {
       orgId: number;
-      year: number;
-      month: number;
+      year?: number;
+      month?: number;
+      start?: string;
+      end?: string;
       fields: ReportFields;
       timeFormat?: "hhmm" | "decimal";
     };
 
-    if (!orgId || !year || !month || !fields) {
-      return res.status(400).json({ error: "orgId, year, month, and fields are required" });
+    if (!orgId || !fields) {
+      return res.status(400).json({ error: "orgId and fields are required" });
+    }
+
+    let range: ReportRange;
+
+    // Custom-range mode takes precedence when start/end are supplied.
+    if (start !== undefined || end !== undefined) {
+      if (!isValidIsoDate(start) || !isValidIsoDate(end)) {
+        return res.status(400).json({ error: "start and end must be valid YYYY-MM-DD dates" });
+      }
+      if (start > end) {
+        return res.status(400).json({ error: "start must be on or before end" });
+      }
+      range = { start, end, mode: "custom" };
+    } else {
+      if (!year || !month || month < 1 || month > 12) {
+        return res.status(400).json({ error: "year and month (1-12) are required, or pass start and end" });
+      }
+      const mr = monthRange(year, month);
+      range = { ...mr, mode: "monthly", year, month };
     }
 
     try {
-      buildMonthlyReportPdf(res, orgId, year, month, fields, timeFormat);
+      buildMonthlyReportPdf(res, orgId, range, fields, timeFormat);
     } catch (err: any) {
       if (!res.headersSent) {
         res.status(500).json({ error: err.message ?? "Report generation failed" });
       }
     }
-  });
+  };
+
+  app.post("/api/report/monthly", handler);
+  app.post("/api/report", handler);
 }
