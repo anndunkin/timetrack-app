@@ -17,6 +17,7 @@ A Windows desktop time-tracking application built with Electron, Express, and Re
 - **Custom fiscal year** — configure any start month and day in Settings
 - **Multi-file support** — create, open, and switch between database files at runtime via the native **File** menu
 - **Persistent local database** — SQLite file stored at `%APPDATA%\TimeTrack\data\timetracker.db` by default, survives app updates and uninstalls
+- **Delete confirmation** — deleting a time entry (from the History page or the Log Time recent list) or a recurring task opens a confirmation dialog first, so a single misclick can't permanently remove data
 - **Single-instance** — launching a second copy focuses the existing window
 
 ---
@@ -320,6 +321,9 @@ timetracker-electron/
 
 | Tag | Description |
 |-----|-------------|
+| v1.3.3 | Export Report dialog is scrollable on small screens so the action buttons stay reachable |
+| v1.3.2 | Confirmation dialog before deleting a time entry or recurring task (prevents accidental data loss) |
+| v1.3.1 | **PDF reports for any custom date range** — Monthly / Custom range toggle in the Export Report dialog; `POST /api/report` accepts `{ orgId, start, end, … }` |
 | v1.3.0 | **History page** — browse, filter (by date range), paginate, and edit *any* time entry, not just recent ones; paginated `GET /api/time-entries?page=&pageSize=` endpoint |
 | v1.1.0 | Multi-file support — native File menu (top menu bar) with create/open/switch; fix preload path bug; fix Annual dept list truncation |
 | v1.0 / v1.0.0 | Initial stable release — core time tracking, multi-dept entries, live timer, weekly/annual summaries, timezone-safe date handling |
