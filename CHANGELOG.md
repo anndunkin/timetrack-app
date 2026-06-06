@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.3] — 2026-06-06
+
+### Fixed
+- Export Report dialog is now scrollable on small screens; the content area scrolls while the header and action buttons (Cancel / Open PDF) stay pinned, so the buttons no longer disappear off the bottom of the screen.
+
 All notable changes to TimeTrack are documented here.
 
 ---
