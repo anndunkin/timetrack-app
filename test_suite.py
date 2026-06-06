@@ -421,6 +421,33 @@ api("DELETE", f"/api/organizations/{OID2}")
 _, ofin, _ = api("GET", "/api/organizations")
 ft("Deleted organization gone",    not any(o["id"]==OID2 for o in ofin))
 
+# ── 8b. DELETE regression (client gained a confirm dialog in 1.3.2; the DELETE
+#        endpoint itself is unchanged and must still behave exactly as before) ──
+print("\n── 8b. Delete Endpoint Regression (confirm-dialog change is client-only) ──")
+# Create two sibling entries; deleting one must remove ONLY the targeted id.
+_, da, _ = api("POST", "/api/time-entries",
+               {"date":"2026-04-15","minutes":45,"organizationId":OID1,
+                "departmentIds":[DID1],"projectId":PID1,"description":"Delete target"})
+_, db, _ = api("POST", "/api/time-entries",
+               {"date":"2026-04-16","minutes":60,"organizationId":OID1,
+                "departmentIds":[DID1],"projectId":PID1,"description":"Delete bystander"})
+DA, DB = da.get("id"), db.get("id")
+s_del, _, _ = api("DELETE", f"/api/time-entries/{DA}")
+ft("DELETE targeted entry → 200",        s_del in (200,204))
+_, after_del, _ = api("GET", "/api/time-entries?start=2026-04-01&end=2026-04-30")
+ft("Targeted entry removed",             not any(e["id"]==DA for e in after_del))
+ft("Sibling entry NOT removed",          any(e["id"]==DB for e in after_del))
+# Idempotent: deleting the same id again is a no-op 404 (does not error/cascade).
+s_again, _, _ = api("DELETE", f"/api/time-entries/{DA}")
+ft("Re-DELETE same id → 404 (idempotent)", s_again==404)
+ft("Sibling still present after re-delete", any(e["id"]==DB for e in
+   api("GET", "/api/time-entries?start=2026-04-01&end=2026-04-30")[1]))
+# Non-integer id is rejected/validated, not treated as a wildcard delete.
+s_badid, _, _ = api("DELETE", "/api/time-entries/abc")
+ft("DELETE non-integer id rejected (400/404)", s_badid in (400,404))
+# Clean up the bystander.
+api("DELETE", f"/api/time-entries/{DB}")
+
 # ═══════════════════════════════════════════════════════════════════════════
 print("\n══════════════════════════════════════════════════")
 print("  TimeTrack v1.2.1 — Security Tests")

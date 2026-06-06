@@ -4,6 +4,15 @@ All notable changes to TimeTrack are documented here.
 
 ---
 
+## [1.3.2] — 2026-06-06
+
+### Added
+- **Confirm before deleting a time entry (and recurring task) to prevent accidental data loss.** Deleting a time entry from the **History** page or the **Log Time** recent-entries list, and deleting a **recurring task**, now open a confirmation dialog instead of deleting immediately on the first click. The dialog warns the deletion is permanent; a destructive **Delete permanently** button confirms and **Cancel** aborts. This reuses the existing shadcn `AlertDialog` pattern already used on the Database page, for visual/UX consistency.
+  - Purely a client-side UX change — the `DELETE /api/time-entries/:id` and `DELETE /api/recurring/:id` endpoints are unchanged. A targeted delete still removes only the requested id, re-deleting a missing id is an idempotent `404`, and non-integer ids are rejected (verified by new regression tests).
+  - Manual verification: clicking a trash button opens the dialog and does **not** delete until **Delete permanently** is clicked; **Cancel** closes the dialog with the entry intact; only one dialog is open at a time.
+
+---
+
 ## [1.3.1] — 2026-06-05
 
 ### Added

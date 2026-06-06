@@ -12,6 +12,16 @@ import {
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Pencil, Trash2, Clock, Plus, CheckCircle2, Play, Square, TimerReset, RefreshCw, Pause } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -58,6 +68,10 @@ export default function TimeEntryPage() {
   // applied — used when navigation arrives before `entries` have loaded.
   const [pendingEditId, setPendingEditId] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
+  // IDs pending delete confirmation (null = no dialog). Kept separate so only
+  // one dialog is ever open at a time and the correct id is deleted.
+  const [deleteEntryId, setDeleteEntryId] = useState<number | null>(null);
+  const [deleteRecurId, setDeleteRecurId] = useState<number | null>(null);
 
   // ── Recurring UI state ───────────────────────────────────────────────────────
   const [makeRecurring, setMakeRecurring] = useState(false);
@@ -265,6 +279,11 @@ export default function TimeEntryPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/recurring"] });
       queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] });
+      setDeleteRecurId(null);
+    },
+    onError: () => {
+      toast({ title: "Delete failed", description: "Could not delete the recurring task. Please try again.", variant: "destructive" });
+      setDeleteRecurId(null);
     },
   });
 
@@ -303,7 +322,14 @@ export default function TimeEntryPage() {
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/time-entries/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] });
+      setDeleteEntryId(null);
+    },
+    onError: () => {
+      toast({ title: "Delete failed", description: "Could not delete the entry. Please try again.", variant: "destructive" });
+      setDeleteEntryId(null);
+    },
   });
 
   function handleSubmit(vals: EntryForm) {
@@ -763,7 +789,8 @@ export default function TimeEntryPage() {
                       </button>
                       <button
                         title="Delete recurring task"
-                        onClick={() => deleteRecurMut.mutate(task.id)}
+                        data-testid={`button-delete-recurring-${task.id}`}
+                        onClick={() => setDeleteRecurId(task.id)}
                         className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
                       >
                         <Trash2 size={13} />
@@ -838,7 +865,7 @@ export default function TimeEntryPage() {
                     </button>
                     <button
                       data-testid={`button-delete-entry-${entry.id}`}
-                      onClick={() => deleteMut.mutate(entry.id)}
+                      onClick={() => setDeleteEntryId(entry.id)}
                       className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
                     >
                       <Trash2 size={13} />
@@ -850,6 +877,50 @@ export default function TimeEntryPage() {
           </div>
         )}
       </div>
+
+      {/* Delete time-entry confirmation dialog */}
+      <AlertDialog open={deleteEntryId !== null} onOpenChange={(open) => { if (!open) setDeleteEntryId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this entry?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the time entry. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteEntryId !== null && deleteMut.mutate(deleteEntryId)}
+              data-testid="button-confirm-delete"
+            >
+              {deleteMut.isPending ? "Deleting…" : "Delete permanently"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete recurring-task confirmation dialog */}
+      <AlertDialog open={deleteRecurId !== null} onOpenChange={(open) => { if (!open) setDeleteRecurId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this recurring task?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the recurring task so no future entries are auto-created. Existing time entries it already created are kept. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-recurring">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteRecurId !== null && deleteRecurMut.mutate(deleteRecurId)}
+              data-testid="button-confirm-delete-recurring"
+            >
+              {deleteRecurMut.isPending ? "Deleting…" : "Delete permanently"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -8,6 +8,16 @@ import {
 } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Clock, Pencil, Trash2, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { cn, minutesToHHMM, formatDate } from "@/lib/utils";
 
@@ -38,6 +48,8 @@ export default function HistoryPage() {
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [page, setPage] = useState(1);
+  // ID of the entry pending delete confirmation (null = no dialog open).
+  const [deleteId, setDeleteId] = useState<number | null>(null);
 
   const { data: orgs = [] } = useQuery<Organization[]>({ queryKey: ["/api/organizations"] });
   const { data: allDepts = [] } = useQuery<Department[]>({ queryKey: ["/api/departments"] });
@@ -68,6 +80,11 @@ export default function HistoryPage() {
       // views reflect the deletion immediately.
       queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] });
       toast({ title: "Entry deleted" });
+      setDeleteId(null);
+    },
+    onError: () => {
+      toast({ title: "Delete failed", description: "Could not delete the entry. Please try again.", variant: "destructive" });
+      setDeleteId(null);
     },
   });
 
@@ -201,7 +218,7 @@ export default function HistoryPage() {
                   </button>
                   <button
                     data-testid={`button-delete-history-${entry.id}`}
-                    onClick={() => deleteMut.mutate(entry.id)}
+                    onClick={() => setDeleteId(entry.id)}
                     title="Delete this entry"
                     className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
                   >
@@ -244,6 +261,28 @@ export default function HistoryPage() {
           </div>
         </div>
       )}
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={deleteId !== null} onOpenChange={(open) => { if (!open) setDeleteId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this entry?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the time entry. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteId !== null && deleteMut.mutate(deleteId)}
+              data-testid="button-confirm-delete"
+            >
+              {deleteMut.isPending ? "Deleting…" : "Delete permanently"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
