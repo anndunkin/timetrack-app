@@ -192,15 +192,15 @@ export default function ExportReportModal({
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
-      <DialogContent className="sm:max-w-[440px]">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-[440px] !flex flex-col max-h-[90vh]">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <FileDown size={18} />
             Export Report
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-5 py-2">
+        <div className="space-y-5 py-2 flex-1 overflow-y-auto min-h-0 -mx-6 px-6">
 
           {/* ── Organization ────────────────────────────────────────────── */}
           <div className="space-y-1.5">
@@ -383,7 +383,7 @@ export default function ExportReportModal({
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={onClose} disabled={loading}>
             Cancel
           </Button>
