@@ -54,7 +54,11 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (c: string)
 // ─── Org Form ─────────────────────────────────────────────────
 function OrgForm({ org, onDone }: { org?: Organization; onDone: () => void }) {
   const { toast } = useToast();
-  const form = useForm<z.infer<typeof insertOrganizationSchema>>({
+  const form = useForm<
+    z.input<typeof insertOrganizationSchema>,
+    unknown,
+    z.output<typeof insertOrganizationSchema>
+  >({
     resolver: zodResolver(insertOrganizationSchema),
     defaultValues: { name: org?.name ?? "", color: org?.color ?? "#01696F" },
   });
@@ -84,7 +88,7 @@ function OrgForm({ org, onDone }: { org?: Organization; onDone: () => void }) {
         <FormField control={form.control} name="color" render={({ field }) => (
           <FormItem>
             <FormLabel>Color</FormLabel>
-            <FormControl><ColorPicker value={field.value} onChange={field.onChange} /></FormControl>
+            <FormControl><ColorPicker value={field.value ?? "#01696F"} onChange={field.onChange} /></FormControl>
             <FormMessage />
           </FormItem>
         )} />
