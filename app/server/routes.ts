@@ -13,7 +13,7 @@ import {
 import { ZodError } from "zod";
 
 function zodError(res: any, err: ZodError) {
-  return res.status(400).json({ error: err.errors[0]?.message ?? "Validation error" });
+  return res.status(400).json({ error: err.issues[0]?.message ?? "Validation error" });
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
