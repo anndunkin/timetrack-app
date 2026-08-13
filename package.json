@@ -67,8 +67,8 @@
     "afterPack": "./scripts/afterPack.cjs"
   },
   "devDependencies": {
-    "electron": "^36.9.5",
-    "electron-builder": "^26.8.1"
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3"
   },
   "overrides": {
     "keyv": "4.5.4",
