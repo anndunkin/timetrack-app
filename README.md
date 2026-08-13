@@ -4,6 +4,15 @@ A Windows desktop time-tracking application built with Electron, Express, and Re
 
 ---
 
+## Dependency modernization (v1.3.4)
+
+- The desktop shell now uses Electron `43.4.0` and electron-builder `26.15.3`.
+- The bundled app now uses React 19, Vite 8, Tailwind CSS 4, TypeScript 7, Zod 4, Express 5.2, sql.js 1.14, and current Radix UI packages.
+- The React UI and build configuration were updated for the associated breaking changes; `npm run check` and `npm run build` in `app/` pass.
+- The root lockfile intentionally retains the security overrides `keyv@4.5.4` and `cacheable-request@7.0.4`.
+
+---
+
 ## Features
 
 - **Organizations → Departments → Projects** hierarchy
@@ -26,7 +35,7 @@ A Windows desktop time-tracking application built with Electron, Express, and Re
 
 | Tool | Version | Download |
 |------|---------|----------|
-| Node.js | 18 or later | https://nodejs.org |
+| Node.js | 22.12 or later | https://nodejs.org |
 
 > **No Visual Studio, no Python, no C++ build tools required.**
 > TimeTrack uses `sql.js` (SQLite compiled to WebAssembly) — a 100% pure JavaScript
@@ -46,7 +55,7 @@ npm run make
 The installer will be produced at:
 
 ```
-dist-electron\TimeTrack Setup 1.1.0.exe
+dist-electron\TimeTrack Setup 1.3.4.exe
 ```
 
 Double-click it to install on any Windows 10 / 11 x64 machine. The installer creates Desktop and Start Menu shortcuts.
@@ -66,7 +75,7 @@ Releases are built automatically by the **Release Windows Installer** GitHub Act
    - Add a new section to `CHANGELOG.md` describing the release.
 2. **Push a `vX.Y.Z` tag** to trigger the workflow:
    ```bash
-   git tag v1.3.0
+   git tag v1.3.4
    git push origin v1.3.0
    ```
    The workflow runs `npm run make`, uploads the installer as a build artifact, and — because

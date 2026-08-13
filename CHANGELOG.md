@@ -2,6 +2,21 @@
 
 All notable changes to TimeTrack are documented here.
 
+## [1.3.4] — 2026-08-13
+
+### Changed
+- **Full dependency modernization** — upgraded the desktop shell to Electron 43.4.0 and electron-builder 26.15.3; upgraded the bundled REST/Express app to current stable direct dependencies, including React 19, Vite 8, Tailwind CSS 4, TypeScript 7, Zod 4, Express 5.2, sql.js 1.14, current Radix UI primitives, and current React ecosystem libraries.
+- Updated the Tailwind/Vite integration and migrated component/form compatibility code for the corresponding API and type changes.
+- The documented development prerequisite is now Node.js 22.12 or later, which satisfies the current Electron and Vite toolchain engines.
+
+### Security
+- Retained the root lockfile overrides `keyv@4.5.4` and `cacheable-request@7.0.4`.
+
+### Validation
+- `npm run check` and `npm run build` pass from `app/`.
+
+---
+
 ## [1.3.3] — 2026-06-06
 
 ### Fixed
