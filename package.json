@@ -1,7 +1,7 @@
 {
   "name": "timetrack",
   "productName": "TimeTrack",
-  "version": "1.3.4",
+  "version": "1.4.0",
   "description": "Desktop time tracking application",
   "main": "main.js",
   "author": "TimeTrack",
@@ -15,7 +15,7 @@
   "build": {
     "appId": "com.timetrack.app",
     "productName": "TimeTrack",
-    "copyright": "Copyright \u00a9 2026 TimeTrack",
+    "copyright": "Copyright © 2026 TimeTrack",
     "buildDependenciesFromSource": false,
     "npmRebuild": false,
     "directories": {
