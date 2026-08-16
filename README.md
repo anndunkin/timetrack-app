@@ -18,6 +18,7 @@ A Windows desktop time-tracking application built with Electron, Express, and Re
 - **Organizations → Departments → Projects** hierarchy
 - **Multi-department time entries** — log a single task against multiple departments; time is split equally across them in all reports
 - **Live timer** — start/stop a running timer on the Log Time page, then click "Use Time" to copy the elapsed time into the entry form
+- **Smart date default** — when logging a new entry, the date field defaults to your most recent entry's date (even if it isn't today), so entering several entries for a past day doesn't require re-picking the date each time (falls back to today when there are no entries)
 - **Edit any entry** — the **History** page lists *all* time entries with date-range filtering and pagination, so you're no longer limited to the recent entries on the Log Time page. Click the pencil on any entry (however old) to open it in the same edit form used for recent entries
 - **Weekly view** — day-by-day breakdown with per-project summary sidebar
 - **Annual summary** — monthly bar chart, by-org/dept/project breakdowns, average per week and per month (both calculated over elapsed periods, not the full year)
@@ -28,6 +29,7 @@ A Windows desktop time-tracking application built with Electron, Express, and Re
 - **Persistent local database** — SQLite file stored at `%APPDATA%\TimeTrack\data\timetracker.db` by default, survives app updates and uninstalls
 - **Delete confirmation** — deleting a time entry (from the History page or the Log Time recent list) or a recurring task opens a confirmation dialog first, so a single misclick can't permanently remove data
 - **Single-instance** — launching a second copy focuses the existing window
+- **About dialog** — Help ▸ About TimeTrack shows the app version (from `app.getVersion()`) and bundled Electron / Chromium / Node versions
 
 ---
 
@@ -330,6 +332,8 @@ timetracker-electron/
 
 | Tag | Description |
 |-----|-------------|
+| v1.4.0 | Log Time defaults the date to your most recent entry's date; new Help ▸ About TimeTrack dialog; fixed report Project Breakdown row overlap when department subtitles wrap |
+| v1.3.4 | Full dependency modernization — Electron 43, React 19, Vite 8, Tailwind 4, Express 5, and other current stable dependencies |
 | v1.3.3 | Export Report dialog is scrollable on small screens so the action buttons stay reachable |
 | v1.3.2 | Confirmation dialog before deleting a time entry or recurring task (prevents accidental data loss) |
 | v1.3.1 | **PDF reports for any custom date range** — Monthly / Custom range toggle in the Export Report dialog; `POST /api/report` accepts `{ orgId, start, end, … }` |
