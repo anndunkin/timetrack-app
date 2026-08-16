@@ -63,6 +63,34 @@ function ensureDefaultFile() {
 // ─── Native application menu ──────────────────────────────────────────────────
 
 /**
+ * Show a native “About” dialog. Version is read from app.getVersion() so it
+ * always reflects the packaged package.json version (never hard-coded).
+ */
+function showAboutDialog() {
+  const version = app.getVersion();
+  const detail = [
+    'A local-first time tracking desktop application.',
+    '',
+    `Version:  ${version}`,
+    `Electron: ${process.versions.electron}`,
+    `Chromium: ${process.versions.chrome}`,
+    `Node:     ${process.versions.node}`,
+    '',
+    `\u00A9 ${new Date().getFullYear()} TimeTrack`,
+  ].join('\n');
+
+  dialog.showMessageBox(mainWindow, {
+    type: 'info',
+    title: 'About TimeTrack',
+    message: `TimeTrack ${version}`,
+    detail,
+    buttons: ['OK'],
+    defaultId: 0,
+    noLink: true,
+  });
+}
+
+/**
  * Build and set the native Electron application menu.
  * Called on startup and whenever the file registry changes.
  */
@@ -124,6 +152,15 @@ function buildMenu() {
     {
       label: 'File',
       submenu: fileItems,
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'About TimeTrack',
+          click: () => showAboutDialog(),
+        },
+      ],
     },
   ];
 
