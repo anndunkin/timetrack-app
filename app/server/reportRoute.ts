@@ -285,8 +285,6 @@ export function buildMonthlyReportPdf(
     label: string, subLabel: string, minutes: number, maxMins: number,
     color: string, budget: number | null = null
   ) {
-    const rowH = subLabel ? 32 : 24;
-    ensureSpace(rowH + 4);
     const pct   = maxMins > 0 ? minutes / maxMins : 0;
     const BAR_H = 8;
     // Layout: label 32% | bar 42% | value 26%
@@ -295,6 +293,27 @@ export function buildMonthlyReportPdf(
     const VAL_W   = CONTENT_W * 0.24;
     const barX    = MARGIN + LABEL_W + 6;
     const valX    = barX + BAR_W + 6;
+
+    // ── Measure the label block so the row height grows with wrapped text.
+    //    The department sub-label can be long (many departments) and must be
+    //    allowed to wrap within LABEL_W; a fixed row height caused the next
+    //    row's title to overlap the wrapped text.
+    const SUB_GAP = 2;   // gap between title and sub-label
+    doc.fontSize(9).font("Helvetica-Bold");
+    const titleH = doc.heightOfString(label, { width: LABEL_W });
+    let subH = 0;
+    if (subLabel) {
+      doc.fontSize(7.5).font("Helvetica");
+      subH = doc.heightOfString(subLabel, { width: LABEL_W });
+    }
+    // Height needed by the label column (title + gap + wrapped sub-label).
+    const labelBlockH = titleH + (subLabel ? SUB_GAP + subH : 0);
+    // Compact baseline so single-line rows look unchanged.
+    const baseRowH = subLabel ? 32 : 24;
+    const ROW_PAD = 6;
+    const rowH = Math.max(baseRowH, labelBlockH + ROW_PAD);
+
+    ensureSpace(rowH + 4);
     const barY    = y + 3;
 
     const hours = fmt(minutes);
@@ -302,12 +321,12 @@ export function buildMonthlyReportPdf(
       ? `${hours} / ${fmt(Math.round(budget * 60))}`
       : hours;
 
-    // Label + sub-label
+    // Label + sub-label (both wrap within LABEL_W)
     doc.fontSize(9).fillColor("#111827").font("Helvetica-Bold")
-       .text(label, MARGIN, y, { width: LABEL_W, lineBreak: false });
+       .text(label, MARGIN, y, { width: LABEL_W });
     if (subLabel) {
       doc.fontSize(7.5).fillColor(MUTED).font("Helvetica")
-         .text(subLabel, MARGIN, y + 12, { width: LABEL_W, lineBreak: false });
+         .text(subLabel, MARGIN, y + titleH + SUB_GAP, { width: LABEL_W });
     }
 
     // Bar track + fill
