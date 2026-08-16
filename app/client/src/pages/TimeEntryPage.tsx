@@ -109,6 +109,16 @@ export default function TimeEntryPage() {
     queryKey: ["/api/recurring"],
   });
 
+  // Default date for a NEW entry: the most recent existing entry's date (even if
+  // it isn't today), so logging several entries for a past day doesn't require
+  // re-picking the date each time. Falls back to today when there are no entries.
+  const lastEntryDate = useMemo(() => {
+    if (entries.length === 0) return todayISO();
+    return entries.reduce((max, e) => (e.date > max ? e.date : max), entries[0].date);
+  }, [entries]);
+  // The date to seed a fresh/blank entry form with.
+  const newEntryDate = () => (entries.length === 0 ? todayISO() : lastEntryDate);
+
   const form = useForm<EntryForm>({
     defaultValues: {
       date: todayISO(),
@@ -184,6 +194,22 @@ export default function TimeEntryPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingEditId, entries]);
 
+  // Seed the NEW-entry date with the most recent entry's date once entries load.
+  // defaultValues run before the entries query resolves, so this applies the
+  // “last entry date” default afterward. Runs once, and only when the user is
+  // NOT editing, has not started a deep-link edit, and has not already changed
+  // the date field themselves.
+  const seededDefaultDate = useRef(false);
+  useEffect(() => {
+    if (seededDefaultDate.current) return;
+    if (entries.length === 0) return;      // wait for entries; keep today until then
+    if (editId !== null || pendingEditId !== null) return; // don't touch edit mode
+    if (form.formState.dirtyFields.date) { seededDefaultDate.current = true; return; }
+    form.setValue("date", lastEntryDate);
+    seededDefaultDate.current = true;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, lastEntryDate, editId, pendingEditId]);
+
   // ── Timer logic ──────────────────────────────────────────────────────────────
   function startTimer() {
     if (timerRunning) return;
@@ -250,7 +276,7 @@ export default function TimeEntryPage() {
       // Reset form and show saved indicator (createMut is NOT called in the
       // recurring path, so we handle UX feedback here instead).
       form.reset({
-        date: todayISO(),
+        date: newEntryDate(),
         organizationId: form.getValues("organizationId"),
         selectedDeptIds: [],
         projectId: 0,
@@ -293,7 +319,7 @@ export default function TimeEntryPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] });
       form.reset({
-        date: todayISO(),
+        date: newEntryDate(),
         organizationId: form.getValues("organizationId"),
         selectedDeptIds: [],
         projectId: 0,
@@ -314,7 +340,7 @@ export default function TimeEntryPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] });
       setEditId(null);
-      form.reset({ date: todayISO(), organizationId: 0, selectedDeptIds: [], projectId: 0, hours: 0, mins: 0, description: "" });
+      form.reset({ date: newEntryDate(), organizationId: 0, selectedDeptIds: [], projectId: 0, hours: 0, mins: 0, description: "" });
       resetTimer();
       toast({ title: "Entry updated" });
     },
@@ -414,7 +440,7 @@ export default function TimeEntryPage() {
     setEditId(null);
     resetTimer();
     setMakeRecurring(false);
-    form.reset({ date: todayISO(), organizationId: 0, selectedDeptIds: [], projectId: 0, hours: 0, mins: 0, description: "" });
+    form.reset({ date: newEntryDate(), organizationId: 0, selectedDeptIds: [], projectId: 0, hours: 0, mins: 0, description: "" });
   }
 
   function orgName(id: number) { return orgs.find(o => o.id === id)?.name ?? "—"; }
