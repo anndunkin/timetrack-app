@@ -2,6 +2,24 @@
 
 All notable changes to TimeTrack are documented here.
 
+## [1.4.0] — 2026-08-16
+
+### Added
+- **About TimeTrack dialog** — a new Help ▸ About TimeTrack menu item opens a native dialog showing the app name, current version (read from `app.getVersion()`, never hard-coded), a short description, and the bundled Electron / Chromium / Node runtime versions.
+
+### Changed
+- **Log Time now defaults the date to your most recent entry's date** — when adding a new entry, the date field is seeded from the latest existing entry (even if that date isn't today) instead of always defaulting to today, so logging several entries for a past day no longer requires re-picking the date each time. Falls back to today when there are no entries, never overrides a date you've already changed, and does not affect editing an existing entry.
+
+### Fixed
+- **Report Project Breakdown row overlap** — when a project's department subtitle wrapped onto multiple lines, the next project's title was drawn on top of it. Rows now measure their wrapped label height and expand dynamically so titles and subtitles never collide. The Department Breakdown (wrapping titles) is handled by the same measurement logic.
+
+### Validation
+- `npm run check` (tsc) is clean and `npm run build` passes from `app/`.
+- Full test suite: 163/163 passed (109 functionality + 54 security).
+- Report fix verified visually by generating a report with multi-line wrapped department subtitles.
+
+---
+
 ## [1.3.4] — 2026-08-13
 
 ### Changed
