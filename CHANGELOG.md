@@ -2,6 +2,17 @@
 
 All notable changes to TimeTrack are documented here.
 
+## [1.4.1] — 2026-10-15
+
+### Fixed
+- **Log Time date default now follows the entry you just logged.** In 1.4.0, after saving a new entry the form reset to the date of the *previous* entry rather than the one just saved (the reset ran before the entry list refreshed), and the default used the latest calendar date across all entries rather than the most recently logged entry — so back-dating an entry never became the new default. The form now carries forward the date of the entry just saved, and on load it uses the date of the most recently logged entry (falling back to today when there are none). Editing an existing entry still shows that entry's own date.
+
+### Validation
+- Browser reproduction (Playwright): with entries on Oct 1 and Oct 5, logging Oct 8 then Sep 20 now leaves the form on Oct 8 then Sep 20, and Sep 20 persists after reload (previously Oct 5, Oct 8, Oct 8).
+- `tsc` clean; `npm run build` passes; full test suite 163/163 (109 functionality + 54 security).
+
+---
+
 ## [1.4.0] — 2026-08-16
 
 ### Added

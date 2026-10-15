@@ -109,15 +109,19 @@ export default function TimeEntryPage() {
     queryKey: ["/api/recurring"],
   });
 
-  // Default date for a NEW entry: the most recent existing entry's date (even if
-  // it isn't today), so logging several entries for a past day doesn't require
-  // re-picking the date each time. Falls back to today when there are no entries.
-  const lastEntryDate = useMemo(() => {
-    if (entries.length === 0) return todayISO();
-    return entries.reduce((max, e) => (e.date > max ? e.date : max), entries[0].date);
+  // Default date for a NEW entry: the date of the most recently LOGGED entry
+  // (highest id), even if that date isn't today, so logging several entries for
+  // a past day doesn't require re-picking the date each time. This is "last
+  // entered", not "latest calendar date" — back-dating an entry makes that
+  // back-dated day the new default. Falls back to today when there are no entries.
+  const lastEntry = useMemo(() => {
+    if (entries.length === 0) return null;
+    return entries.reduce((last, e) => (e.id > last.id ? e : last), entries[0]);
   }, [entries]);
-  // The date to seed a fresh/blank entry form with.
-  const newEntryDate = () => (entries.length === 0 ? todayISO() : lastEntryDate);
+  const lastEntryDate = lastEntry ? lastEntry.date : todayISO();
+  // The date to seed a fresh/blank entry form with when no just-saved date is
+  // available (cancel edit, initial load).
+  const newEntryDate = () => lastEntryDate;
 
   const form = useForm<EntryForm>({
     defaultValues: {
@@ -267,7 +271,7 @@ export default function TimeEntryPage() {
   // ── Mutations ────────────────────────────────────────────────────────────────
   const createRecurMut = useMutation({
     mutationFn: (data: object) => apiRequest("POST", "/api/recurring", data),
-    onSuccess: () => {
+    onSuccess: (_data, vars: any) => {
       // Invalidate both the recurring list AND time-entries — the server fires
       // runDueRecurrences immediately on create, so new back-filled entries
       // exist in the DB by the time this callback runs.
@@ -276,7 +280,7 @@ export default function TimeEntryPage() {
       // Reset form and show saved indicator (createMut is NOT called in the
       // recurring path, so we handle UX feedback here instead).
       form.reset({
-        date: newEntryDate(),
+        date: vars?.startDate ?? newEntryDate(),
         organizationId: form.getValues("organizationId"),
         selectedDeptIds: [],
         projectId: 0,
@@ -316,10 +320,10 @@ export default function TimeEntryPage() {
   const createMut = useMutation({
     mutationFn: (data: z.infer<typeof insertTimeEntrySchema>) =>
       apiRequest("POST", "/api/time-entries", data),
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] });
       form.reset({
-        date: newEntryDate(),
+        date: vars.date, // the entry just saved is now the last entry
         organizationId: form.getValues("organizationId"),
         selectedDeptIds: [],
         projectId: 0,
@@ -337,10 +341,10 @@ export default function TimeEntryPage() {
   const updateMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: z.infer<typeof insertTimeEntrySchema> }) =>
       apiRequest("PUT", `/api/time-entries/${id}`, data),
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ["/api/time-entries"] });
       setEditId(null);
-      form.reset({ date: newEntryDate(), organizationId: 0, selectedDeptIds: [], projectId: 0, hours: 0, mins: 0, description: "" });
+      form.reset({ date: lastEntry && lastEntry.id === vars.id ? vars.data.date : newEntryDate(), organizationId: 0, selectedDeptIds: [], projectId: 0, hours: 0, mins: 0, description: "" });
       resetTimer();
       toast({ title: "Entry updated" });
     },
