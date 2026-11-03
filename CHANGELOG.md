@@ -2,6 +2,11 @@
 
 All notable changes to TimeTrack are documented here.
 
+## [1.4.4] - 2026-11-03
+
+### Fixed
+- Sidebar: the navigation panel had no background, so its light-gray text was unreadable against the light page. The sidebar color setting pointed to a variable that was never defined; it now uses the dark navy sidebar color in both light and dark mode.
+
 ## [1.4.3] - 2026-11-02
 
 ### Security

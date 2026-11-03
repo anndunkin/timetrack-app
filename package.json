@@ -1,7 +1,7 @@
 {
   "name": "timetrack",
   "productName": "TimeTrack",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "description": "Desktop time tracking application",
   "main": "main.js",
   "author": "TimeTrack",
