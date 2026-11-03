@@ -545,7 +545,7 @@ export interface IStorage {
 
   getTimeEntries(): TimeEntry[];
   getTimeEntriesByDateRange(start: string, end: string): TimeEntry[];
-  getTimeEntriesPage(opts: { start?: string; end?: string; limit: number; offset: number }): { entries: TimeEntry[]; total: number };
+  getTimeEntriesPage(opts: { start?: string; end?: string; organizationId?: number; limit: number; offset: number }): { entries: TimeEntry[]; total: number };
   createTimeEntry(data: InsertTimeEntry): TimeEntry;
   updateTimeEntry(id: number, data: InsertTimeEntry): TimeEntry | undefined;
   deleteTimeEntry(id: number): void;
@@ -766,13 +766,17 @@ export const storage: IStorage = {
       [start, end],
     ).map(mapTimeEntry);
   },
-  getTimeEntriesPage({ start, end, limit, offset }) {
-    // Build an optional date-range WHERE clause shared by the count and page
+  getTimeEntriesPage({ start, end, organizationId, limit, offset }) {
+    // Build an optional date/organization WHERE clause shared by the count and page
     // queries so the total reflects the same filter as the returned rows.
     const where: string[] = [];
     const params: (string | number)[] = [];
     if (start) { where.push("date >= ?"); params.push(start); }
     if (end)   { where.push("date <= ?"); params.push(end); }
+    if (organizationId !== undefined) {
+      where.push("organization_id = ?");
+      params.push(organizationId);
+    }
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
     const totalRow = first<{ count: number }>(

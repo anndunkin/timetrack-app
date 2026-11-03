@@ -94,26 +94,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const { start, end, page, pageSize } = req.query as {
       start?: string; end?: string; page?: string; pageSize?: string;
     };
+    const rawOrganizationId = req.query.organizationId;
+    let organizationId: number | undefined;
+    if (rawOrganizationId !== undefined) {
+      if (typeof rawOrganizationId !== "string" ||
+          !/^[1-9]\d*$/.test(rawOrganizationId) ||
+          !Number.isSafeInteger(Number(rawOrganizationId))) {
+        return res.status(400).json({ error: "organizationId must be a positive integer" });
+      }
+      organizationId = Number(rawOrganizationId);
+    }
 
     // Paginated mode: when `page` (or `pageSize`) is supplied, return an
     // envelope { entries, total, page, pageSize } so the History view can
-    // page through ALL entries — optionally constrained by a date range.
+    // page through ALL entries, optionally constrained by dates and organization.
     if (page !== undefined || pageSize !== undefined) {
       const p  = Math.max(1, Number(page) || 1);
       const ps = Math.min(200, Math.max(1, Number(pageSize) || 25));
       const { entries, total } = storage.getTimeEntriesPage({
         start: start || undefined,
         end: end || undefined,
+        organizationId,
         limit: ps,
         offset: (p - 1) * ps,
       });
       return res.json({ entries, total, page: p, pageSize: ps });
     }
 
-    if (start && end) {
-      return res.json(storage.getTimeEntriesByDateRange(start, end));
-    }
-    res.json(storage.getTimeEntries());
+    const entries = start && end
+      ? storage.getTimeEntriesByDateRange(start, end)
+      : storage.getTimeEntries();
+    res.json(organizationId === undefined
+      ? entries
+      : entries.filter(entry => entry.organizationId === organizationId));
   });
   app.post("/api/time-entries", (req, res) => {
     const parsed = insertTimeEntrySchema.safeParse(req.body);

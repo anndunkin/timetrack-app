@@ -44,9 +44,11 @@ export default function HistoryPage() {
   // Draft filter inputs (applied only when the user clicks "Apply").
   const [draftStart, setDraftStart] = useState("");
   const [draftEnd, setDraftEnd] = useState("");
+  const [draftOrganizationId, setDraftOrganizationId] = useState("");
   // Applied filters that actually drive the query.
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
+  const [organizationId, setOrganizationId] = useState("");
   const [page, setPage] = useState(1);
   // ID of the entry pending delete confirmation (null = no dialog open).
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -61,8 +63,9 @@ export default function HistoryPage() {
     params.set("pageSize", String(PAGE_SIZE));
     if (start) params.set("start", start);
     if (end) params.set("end", end);
+    if (organizationId) params.set("organizationId", organizationId);
     return params.toString();
-  }, [page, start, end]);
+  }, [page, start, end, organizationId]);
 
   const { data, isLoading } = useQuery<EntriesPage>({
     queryKey: ["/api/time-entries", "history", qs],
@@ -103,18 +106,21 @@ export default function HistoryPage() {
   function applyFilters() {
     setStart(draftStart);
     setEnd(draftEnd);
+    setOrganizationId(draftOrganizationId);
     setPage(1);
   }
 
   function clearFilters() {
     setDraftStart("");
     setDraftEnd("");
+    setDraftOrganizationId("");
     setStart("");
     setEnd("");
+    setOrganizationId("");
     setPage(1);
   }
 
-  const hasFilter = Boolean(start || end);
+  const hasFilter = Boolean(start || end || organizationId);
 
   return (
     <div>
@@ -128,6 +134,21 @@ export default function HistoryPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-end gap-3 mb-6 p-4 rounded-lg border bg-card">
+        <div className="w-full sm:w-56">
+          <label htmlFor="history-organization" className="block text-xs text-muted-foreground font-medium mb-1">Organization</label>
+          <select
+            id="history-organization"
+            data-testid="select-history-organization"
+            value={draftOrganizationId}
+            onChange={e => setDraftOrganizationId(e.target.value)}
+            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <option value="">All organizations</option>
+            {[...orgs].sort((a, b) => a.name.localeCompare(b.name)).map(org => (
+              <option key={org.id} value={String(org.id)}>{org.name}</option>
+            ))}
+          </select>
+        </div>
         <div>
           <label className="block text-xs text-muted-foreground font-medium mb-1">From</label>
           <Input
@@ -169,7 +190,7 @@ export default function HistoryPage() {
       ) : entries.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground border border-dashed rounded-lg">
           <Clock size={28} className="mx-auto mb-2 opacity-30" />
-          <p className="text-sm">{hasFilter ? "No entries in this date range" : "No time entries yet"}</p>
+          <p className="text-sm">{hasFilter ? "No entries match these filters" : "No time entries yet"}</p>
         </div>
       ) : (
         <div className="space-y-2">

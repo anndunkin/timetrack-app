@@ -19,7 +19,7 @@ A Windows desktop time-tracking application built with Electron, Express, and Re
 - **Multi-department time entries** — log a single task against multiple departments; time is split equally across them in all reports
 - **Live timer** — start/stop a running timer on the Log Time page, then click "Use Time" to copy the elapsed time into the entry form
 - **Smart date default** — when logging a new entry, the date field defaults to the date of the entry you logged most recently (even if it isn't today, and including back-dated entries), so entering several entries for a past day doesn't require re-picking the date each time (falls back to today when there are no entries)
-- **Edit any entry** — the **History** page lists *all* time entries with date-range filtering and pagination, so you're no longer limited to the recent entries on the Log Time page. Click the pencil on any entry (however old) to open it in the same edit form used for recent entries
+- **Edit any entry** — the **History** page lists *all* time entries with organization and date-range filtering and pagination, so you're no longer limited to the recent entries on the Log Time page. Choose an organization (or leave **All organizations** selected), optionally enter From/To dates, and click **Apply**. Organization and date filters work independently or together; **Clear** resets all filters. Counts and pagination reflect the filtered results. Click the pencil on any entry (however old) to open it in the same edit form used for recent entries
 - **Weekly view** — day-by-day breakdown with per-project summary sidebar
 - **Annual summary** — monthly bar chart, by-org/dept/project breakdowns, average per week and per month (both calculated over elapsed periods, not the full year)
 - **PDF reports for any date range** — generate a polished PDF report (summary totals, project/department breakdowns, daily log) for a calendar month *or* an arbitrary custom date range (e.g. mid-month to mid-next-month, or a full quarter). Switch between **Monthly** and **Custom range** in the Export Report dialog; custom reports show the date range in the title
@@ -332,6 +332,7 @@ timetracker-electron/
 
 | Tag | Description |
 |-----|-------------|
+| v1.4.2 | History organization filter, usable alone or with dates; filtered counts and pagination; Clear resets all filters |
 | v1.4.1 | Fixed Log Time date default — the form now keeps the date of the entry you just logged (1.4.0 lagged one entry behind) |
 | v1.4.0 | Log Time defaults the date to your most recent entry's date; new Help ▸ About TimeTrack dialog; fixed report Project Breakdown row overlap when department subtitles wrap |
 | v1.3.4 | Full dependency modernization — Electron 43, React 19, Vite 8, Tailwind 4, Express 5, and other current stable dependencies |
@@ -353,4 +354,3 @@ the August 2026 Keyv/Cacheable npm supply chain attack, which compromised
 These are transitive dependencies pulled in via `got` → `@electron/get` → `electron`.
 **Before removing or updating these overrides**, verify that newer versions of
 `keyv`/`cacheable-request` are confirmed clean against current npm security advisories.
-

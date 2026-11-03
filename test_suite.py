@@ -1,10 +1,11 @@
 """
 TimeTrack v1.2.1 — Full Functionality + Security Test Suite
-Run against a live server on port 5001.
+Run against a live server with an isolated disposable database on port 5001,
+or set TEST_BASE_URL to the test server URL.
 """
 import urllib.request, urllib.error, json, os, sqlite3, sys, threading
 
-BASE = "http://127.0.0.1:5001"
+BASE = os.environ.get("TEST_BASE_URL", "http://127.0.0.1:5001")
 func_results = []
 sec_results  = []
 
@@ -218,7 +219,43 @@ ft("Filtered total <= overall total", pgr.get("total", 0) <= pg1.get("total", 0)
 ft("Filtered rows within range",
    all("2025-01-01" <= e["date"] <= "2025-02-28" for e in pgr.get("entries", [])))
 
-# Edit an OLD (non-recent) entry by id and confirm it persists
+# Organization filters, independently and combined with dates and pagination.
+_, history_all, _ = api("GET", "/api/time-entries")
+org_expected = sorted(
+    [e for e in history_all if e["organizationId"] == OID1],
+    key=lambda e: (e["date"], e["id"]), reverse=True)
+_, org_page, _ = api("GET", f"/api/time-entries?page=1&pageSize=10&organizationId={OID1}")
+ft("Organization filter has exact total", org_page.get("total") == len(org_expected))
+ft("Organization filter applied before pagination", org_page.get("entries") == org_expected[:10])
+_, org_page2, _ = api("GET", f"/api/time-entries?page=2&pageSize=10&organizationId={OID1}")
+ft("Organization filter retained on second page", org_page2.get("entries") == org_expected[10:20])
+ft("Organization total stable across pages", org_page2.get("total") == len(org_expected))
+for suffix, expected in [
+    ("&start=2025-01-01&end=2025-02-28",
+     [e for e in org_expected if "2025-01-01" <= e["date"] <= "2025-02-28"]),
+    ("&start=2026-04-01", [e for e in org_expected if e["date"] >= "2026-04-01"]),
+    ("&end=2025-02-28", [e for e in org_expected if e["date"] <= "2025-02-28"]),
+]:
+    _, filtered, _ = api("GET", f"/api/time-entries?page=1&pageSize=200&organizationId={OID1}{suffix}")
+    ft(f"Organization combines with dates {suffix}",
+       filtered.get("entries") == expected and filtered.get("total") == len(expected))
+_, org_array, _ = api("GET", f"/api/time-entries?organizationId={OID2}")
+ft("Unpaginated organization filter preserves array response",
+   isinstance(org_array, list) and len(org_array) > 0 and all(e["organizationId"] == OID2 for e in org_array))
+_, missing_org, _ = api("GET", "/api/time-entries?page=1&organizationId=9007199254740991")
+ft("Unknown organization returns empty page", missing_org.get("entries") == [] and missing_org.get("total") == 0)
+_, no_match, _ = api("GET", f"/api/time-entries?page=1&organizationId={OID2}&end=2025-12-31")
+ft("Organization/date no-match returns empty page", no_match.get("entries") == [] and no_match.get("total") == 0)
+_, cleared, _ = api("GET", "/api/time-entries?page=1&pageSize=10")
+ft("Omitting organization restores all entries", cleared == pg1)
+from urllib.parse import quote
+for bad in ["", "0", "-1", "1.5", "NaN", "Infinity", "1e2", "9007199254740992", "1 OR 1=1", "1; DROP TABLE time_entries;--"]:
+    status, _, _ = api("GET", f"/api/time-entries?page=1&organizationId={quote(bad)}")
+    st(f"Invalid organization ID rejected: {bad!r}", status == 400)
+status, _, _ = api("GET", f"/api/time-entries?page=1&organizationId={OID1}&organizationId={OID2}")
+st("Repeated organization query rejected", status == 400)
+
+# Existing historical-entry editing remains unchanged.
 if OLD_ENTRY_ID is not None:
     s_edit, edited, _ = api("PUT", f"/api/time-entries/{OLD_ENTRY_ID}",
         {"date": "2025-01-05", "minutes": 222, "organizationId": OID1,

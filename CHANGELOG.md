@@ -2,6 +2,29 @@
 
 All notable changes to TimeTrack are documented here.
 
+## [1.4.2] - 2026-11-02
+
+### Added
+- History Organization dropdown with alphabetically sorted organizations and an All organizations default. Use it alone or together with either or both date bounds.
+- Apply resets pagination to page one. Clear resets the organization and dates. The empty-state message now covers all filter combinations.
+- Optional validated `organizationId` on `GET /api/time-entries`. Paginated queries filter in parameterized SQL before counting and paging; legacy array responses retain their shape.
+- API regression tests for organization-only and combined filters, pagination, totals, empty results, clearing, and malformed/injection inputs. A Playwright UI regression script is available at `scripts/test-history-ui.cjs` (requires Playwright and a running server with an isolated disposable database).
+
+### Compatibility
+- No database migration or changes to the edit flow, delete confirmation, installer identity, or data-retention settings.
+
+### Security
+- Updated compatible locked dependencies: body-parser 2.4.0, content-type 2.1.0 (body-parser dependency), proxy-addr 2.0.8, qs 6.17.1, and zod 4.6.7.
+- Production dependency audit reports zero known vulnerabilities after these updates. Existing root supply-chain protection overrides remain unchanged.
+
+### Validation
+- TypeScript check and production build pass.
+- API regression suite: 185/185 passed (120 functionality and 65 security).
+- Browser regression suite: 12/12 passed, including independent/combined filters, Apply/Clear, filtered pagination, no-match results, 800x600 layout, edit navigation, delete cancellation, and no uncaught browser errors.
+- Native Windows installation, upgrade, repair, and uninstall execution were not tested in the Linux build environment.
+
+---
+
 ## [1.4.1] — 2026-10-15
 
 ### Fixed
