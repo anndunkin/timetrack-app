@@ -2,6 +2,21 @@
 
 All notable changes to TimeTrack are documented here.
 
+## [1.4.3] - 2026-11-02
+
+### Security
+- Electron 43.4.0 -> 43.8.6 (patch release on the same major; fixes advisories against 43.4.0) and electron-builder 26.15.3 -> 26.18.0.
+- Root package: transitive fixes for @xmldom/xmldom, brace-expansion, fast-uri, js-yaml and undici via `npm audit fix`. `keyv` 4.5.4 and `cacheable-request` 7.0.4 overrides verified intact.
+- Inner `app/` package audited for the first time: now at 0 high and 0 critical findings.
+
+### Changed
+- `app/` dependencies refreshed: React / React DOM 19.3.1, Express 5.3.0, framer-motion 14.9.0, @tanstack/react-query 5.105.3, react-hook-form 7.91.0, @hookform/resolvers 7.0.1, react-day-picker 10.0.2, react-resizable-panels 4.16.1, lucide-react 1.66.0, sql.js 1.15.2, tailwindcss and @tailwindcss/vite 4.3.4, vite 8.3.5, @vitejs/plugin-react 6.2.1, tsx 4.23.15, all Radix UI packages, and related type packages.
+- Verified: TypeScript check clean, production build succeeds, server test suite 185/185 (120 functional, 65 security), and the app renders on every page without script errors.
+
+### Notes
+- pdfkit stays at 0.19.1. Version 0.20.x loads its font and color-profile data through an ESM-only URL form that crashes the bundled CommonJS server at startup.
+- Remaining findings: 15 moderate in the root package (a minimatch denial-of-service advisory inside electron-builder's build-time toolchain) and 2 moderate in `app/` (`@tailwindcss/typography` build plugin). None ship in the installed app, and npm's only suggested "fixes" are downgrades.
+
 ## [1.4.2] - 2026-11-02
 
 ### Added

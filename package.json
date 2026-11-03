@@ -1,7 +1,7 @@
 {
   "name": "timetrack",
   "productName": "TimeTrack",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "description": "Desktop time tracking application",
   "main": "main.js",
   "author": "TimeTrack",
@@ -67,8 +67,8 @@
     "afterPack": "./scripts/afterPack.cjs"
   },
   "devDependencies": {
-    "electron": "^43.4.0",
-    "electron-builder": "^26.15.3"
+    "electron": "^43.8.6",
+    "electron-builder": "^26.18.0"
   },
   "overrides": {
     "keyv": "4.5.4",
