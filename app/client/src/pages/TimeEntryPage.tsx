@@ -534,7 +534,9 @@ export default function TimeEntryPage() {
                     disabled={noSetup}
                   >
                     <option value={0}>Select organization…</option>
-                    {orgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                    {[...orgs].sort((a, b) => a.name.localeCompare(b.name)).map(o => (
+                      <option key={o.id} value={o.id}>{o.name}</option>
+                    ))}
                   </select>
                 </FormControl>
               </FormItem>

@@ -36,7 +36,7 @@ const baseURL = process.env.TEST_BASE_URL || 'http://127.0.0.1:5001';
       document.querySelector('[data-testid="text-history-total"]')?.textContent === `${value} ${value === 1 ? 'entry' : 'entries'}`, total);
   };
   try {
-    for (const name of ['History UI Alpha', 'History UI Beta', 'History UI Empty']) {
+    for (const name of ['History UI Beta', 'history UI alpha', 'History UI Empty']) {
       orgs.push(await api('POST', '/api/organizations', { name, color: '#01696F' }));
     }
     for (const org of orgs.slice(0, 2)) {
@@ -126,6 +126,16 @@ const baseURL = process.env.TEST_BASE_URL || 'http://127.0.0.1:5001';
       // The edit flow consumes and removes the query parameter immediately.
       await page.getByRole('heading', { name: 'Edit Entry', exact: true }).waitFor();
       assert.equal(await page.getByTestId('input-date').inputValue(), entries[0].date);
+      assert.equal(await page.getByTestId('select-org').inputValue(), String(orgs[0].id));
+    });
+    await check('Log Time lists organizations alphabetically and keeps the placeholder first', async () => {
+      const selector = page.getByTestId('select-org');
+      const options = await selector.locator('option').evaluateAll(items =>
+        items.map(item => ({ value: item.value, label: item.textContent })));
+      assert.deepEqual(options[0], { value: '0', label: 'Select organization…' });
+      const fixtureIds = new Set(orgs.map(org => String(org.id)));
+      assert.deepEqual(options.filter(option => fixtureIds.has(option.value)), [orgs[1], orgs[0], orgs[2]].map(org =>
+        ({ value: String(org.id), label: org.name })));
     });
     assert.deepEqual(errors, [], 'No uncaught browser errors');
     console.log('PASS No uncaught browser errors');

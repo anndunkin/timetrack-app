@@ -2,6 +2,11 @@
 
 All notable changes to TimeTrack are documented here.
 
+## [1.4.5] - 2026-11-24
+
+### Fixed
+- Log Time: the organization dropdown now lists organization names alphabetically, with the “Select organization…” placeholder still at the top.
+
 ## [1.4.4] - 2026-11-03
 
 ### Fixed
