@@ -2,6 +2,8 @@
 
 A Windows desktop time-tracking application built with Electron, Express, and React.
 
+Download the Windows x64 installer from the [latest TimeTrack release](https://github.com/anndunkin/timetrack-app/releases/latest). Run the installer to install or update TimeTrack. Your existing database stays in place.
+
 ---
 
 ## Dependency modernization (v1.3.4)
@@ -16,6 +18,7 @@ A Windows desktop time-tracking application built with Electron, Express, and Re
 ## Features
 
 - **Organizations → Departments → Projects** hierarchy
+- **Alphabetical organization selection:** On Log Time, the Organization dropdown lists names A to Z, with **Select organization…** at the top. When editing an entry, its saved organization remains selected.
 - **Multi-department time entries** — log a single task against multiple departments; time is split equally across them in all reports
 - **Live timer** — start/stop a running timer on the Log Time page, then click "Use Time" to copy the elapsed time into the entry form
 - **Smart date default** — when logging a new entry, the date field defaults to the date of the entry you logged most recently (even if it isn't today, and including back-dated entries), so entering several entries for a past day doesn't require re-picking the date each time (falls back to today when there are no entries)
@@ -57,7 +60,7 @@ npm run make
 The installer will be produced at:
 
 ```
-dist-electron\TimeTrack Setup 1.3.4.exe
+dist-electron\TimeTrack Setup 1.4.5.exe
 ```
 
 Double-click it to install on any Windows 10 / 11 x64 machine. The installer creates Desktop and Start Menu shortcuts.
@@ -73,15 +76,16 @@ Releases are built automatically by the **Release Windows Installer** GitHub Act
 (`.github/workflows/release.yml`), which runs on `windows-latest`.
 
 1. **Bump the version and update the changelog.**
-   - Update `"version"` in `package.json` (and `app/package.json` for consistency).
+   - Keep the versions in both `package.json` and `package-lock.json` files in sync (the root and `app/`).
    - Add a new section to `CHANGELOG.md` describing the release.
 2. **Push a `vX.Y.Z` tag** to trigger the workflow:
    ```bash
-   git tag v1.3.4
-   git push origin v1.3.0
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
    ```
-   The workflow runs `npm run make`, uploads the installer as a build artifact, and — because
-   the trigger is a tag — attaches the `.exe` to the GitHub Release for that tag.
+   Replace `vX.Y.Z` in both commands with the version you are releasing. The workflow builds
+   the app and the Windows installer, uploads the installer as a build artifact, and attaches
+   the `.exe` to the GitHub release for the tag.
    You can also run it manually from the **Actions** tab via **workflow_dispatch** (this still
    produces a build artifact, but does not create a Release).
 3. **For a SIGNED installer**, add two repository secrets (Settings → Secrets and variables →
@@ -332,6 +336,9 @@ timetracker-electron/
 
 | Tag | Description |
 |-----|-------------|
+| v1.4.5 | Log Time organization dropdown sorts names A to Z; History filtering is unchanged |
+| v1.4.4 | Restored readable sidebar colors |
+| v1.4.3 | Electron and app dependency security refresh |
 | v1.4.2 | History organization filter, usable alone or with dates; filtered counts and pagination; Clear resets all filters |
 | v1.4.1 | Fixed Log Time date default — the form now keeps the date of the entry you just logged (1.4.0 lagged one entry behind) |
 | v1.4.0 | Log Time defaults the date to your most recent entry's date; new Help ▸ About TimeTrack dialog; fixed report Project Breakdown row overlap when department subtitles wrap |

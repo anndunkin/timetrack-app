@@ -7,6 +7,13 @@ All notable changes to TimeTrack are documented here.
 ### Fixed
 - Log Time: the organization dropdown now lists organization names alphabetically, with the “Select organization…” placeholder still at the top.
 
+### Compatibility
+- Saved organization selections and History filtering are unchanged. No database migration is needed.
+
+### Validation
+- TypeScript check, production build, all 185 API checks, and all 13 browser checks passed.
+- The installer passed fresh installation, upgrade from 1.4.4, reinstall to restore a missing file, and uninstall checks under Wine. Existing data was preserved. Native Windows desktop launch was not verified.
+
 ## [1.4.4] - 2026-11-03
 
 ### Fixed
