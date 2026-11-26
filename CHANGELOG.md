@@ -16,7 +16,10 @@ All notable changes to TimeTrack are documented here.
 - No database migration. Existing data files open unchanged.
 
 ### Validation
-- TypeScript check and production build passed; all 185 existing API and security checks passed; search and alphabetical ordering verified against a disposable database and in a browser. Windows installer built by the release workflow; native Windows launch not verified here.
+- TypeScript check and production build passed.
+- `test_suite.py` now includes a Search and Alphabetical Order section (alphabetical organizations, departments and projects; search by description, project, organization and date; organization and date filters; empty query; input validation; SQL injection and script probes). All 206 checks passed (134 functionality, 72 security).
+- Browser check: the quick-search bar opens the Search page with the correct result, and the organization dropdown lists names A to Z.
+- The Windows installer `TimeTrack.Setup.1.5.0.exe` was built by the release workflow (SHA-256 31ff6a70...1c23e) and is unsigned because no signing certificate is configured. Install, upgrade, repair and uninstall checks and a native Windows launch were not run for this release.
 
 ## [1.4.5] - 2026-11-24
 

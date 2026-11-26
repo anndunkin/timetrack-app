@@ -1,5 +1,5 @@
 """
-TimeTrack v1.2.1 — Full Functionality + Security Test Suite
+TimeTrack v1.5.0 — Full Functionality + Security Test Suite
 Run against a live server with an isolated disposable database on port 5001,
 or set TEST_BASE_URL to the test server URL.
 """
@@ -56,7 +56,7 @@ def api(method, path, body=None):
 
 # ═══════════════════════════════════════════════════════════════════════════
 print("\n══════════════════════════════════════════════════")
-print("  TimeTrack v1.2.1 — Functionality Tests")
+print("  TimeTrack v1.5.0 — Functionality Tests")
 print("══════════════════════════════════════════════════\n")
 
 # ── 1. SETTINGS ─────────────────────────────────────────────────────────────
@@ -654,6 +654,45 @@ st("10 concurrent writes — no server errors", len(errors_c)==0,
 st("All 10 entries created successfully",     len(created_c)==10,
    f"only {len(created_c)}" if len(created_c)!=10 else "")
 for eid in created_c: req("DELETE", f"/api/time-entries/{eid}")
+
+# ── H. SEARCH AND ALPHABETICAL ORDER (v1.5.0) ─────────────────────────────────
+print("\n── H. Search and Alphabetical Order ──")
+import urllib.parse
+_o = [req("POST","/api/organizations",{"name":n})[1] for n in ("zzSrch Org","aaSrch org","MmSrch Org")]
+names = [o["name"] for o in req("GET","/api/organizations")[1]]
+sub = [n for n in names if "Srch" in n]
+ft("Organizations list is alphabetical, case-insensitive", sub==["aaSrch org","MmSrch Org","zzSrch Org"], str(sub))
+_d = [req("POST","/api/departments",{"organizationId":_o[0]["id"],"name":n})[1] for n in ("zDept","Adept","mDept")]
+dn = [d["name"] for d in req("GET","/api/departments")[1] if d["organizationId"]==_o[0]["id"]]
+ft("Departments list is alphabetical", dn==["Adept","mDept","zDept"], str(dn))
+_p = [req("POST","/api/projects",{"name":n,"departmentIds":[_d[0]["id"]]})[1] for n in ("zProj","Aproj","mProj")]
+pn = [p["name"] for p in req("GET","/api/projects")[1] if p["id"] in [x["id"] for x in _p]]
+ft("Projects list is alphabetical", pn==["Aproj","mProj","zProj"], str(pn))
+_e = req("POST","/api/time-entries",{"date":"2026-05-05","minutes":45,"organizationId":_o[0]["id"],
+     "departmentIds":[_d[0]["id"]],"projectId":_p[1]["id"],"description":"Quarterly Zanzibar review"})[1]
+def srch(q): return req("GET","/api/search?"+q)
+s_, d_, _ = srch("q="+urllib.parse.quote("zanzibar"))
+ft("Search finds entry by description (case-insensitive)", s_==200 and d_["entryTotal"]==1 and d_["entries"][0]["id"]==_e["id"])
+ft("Search requires all terms", srch("q=zanzibar+nonexistentword")[1]["entryTotal"]==0)
+ft("Search matches entry by project name", srch("q=aproj")[1]["entryTotal"]>=1)
+ft("Search matches entry by organization name", any(e["id"]==_e["id"] for e in srch("q=zzsrch")[1]["entries"]))
+ft("Search matches entry by date", any(e["id"]==_e["id"] for e in srch("q=2026-05-05")[1]["entries"]))
+ft("Search returns matching organizations", any(o["name"]=="aaSrch org" for o in srch("q=aasrch")[1]["organizations"]))
+ft("Search returns matching departments", any(d["name"]=="mDept" for d in srch("q=mdept")[1]["departments"]))
+ft("Search returns matching projects", any(p["name"]=="mProj" for p in srch("q=mproj")[1]["projects"]))
+ft("Search organization filter excludes other orgs", srch(f"q=zanzibar&organizationId={_o[1]['id']}")[1]["entryTotal"]==0)
+ft("Search date filter excludes out-of-range", srch("q=zanzibar&start=2026-06-01&end=2026-06-30")[1]["entryTotal"]==0)
+ft("Search with empty query returns no results", srch("q=")[1]["entryTotal"]==0)
+st("Search rejects non-numeric organizationId", srch("q=x&organizationId=abc")[0]==400)
+st("Search rejects negative organizationId", srch("q=x&organizationId=-1")[0]==400)
+for i,probe in enumerate(("' OR 1=1 --", "'; DROP TABLE time_entries;--", "%", "<script>alert(1)</script>")):
+    s_, d_, _ = srch("q="+urllib.parse.quote(probe))
+    st(f"Search injection probe {i+1} handled safely", s_==200 and d_["entryTotal"]==0)
+st("Data intact after search injection probes", req("GET","/api/time-entries")[0]==200)
+req("DELETE", f"/api/time-entries/{_e['id']}")
+for x in _p: req("DELETE", f"/api/projects/{x['id']}")
+for x in _d: req("DELETE", f"/api/departments/{x['id']}")
+for x in _o: req("DELETE", f"/api/organizations/{x['id']}")
 
 # ═══════════════════════════════════════════════════════════════════════════
 fp = sum(1 for r in func_results if r[0]=="PASS")

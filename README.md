@@ -334,6 +334,16 @@ timetracker-electron/
 
 ---
 
+## Testing
+
+Start the production server against a disposable database and run the suite:
+
+```
+cd app && npm run build
+DB_PATH=/tmp/test.db PORT=5001 NODE_ENV=production node dist/index.cjs
+python3 test_suite.py        # 206 checks: functionality and security, including search (v1.5.0)
+```
+
 ## Version history
 
 | Tag | Description |
