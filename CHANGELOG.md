@@ -2,6 +2,22 @@
 
 All notable changes to TimeTrack are documented here.
 
+## [1.5.0] - 2026-11-26
+
+### Added
+- Search page (new Search item in the sidebar) that searches time entries (description, date, organization, department and project), organizations, departments, projects and recurring tasks. Every word you type must match, case is ignored, and results can be limited by organization and From/To dates. Pencil on an entry opens it in the Log Time edit form.
+- Quick-search bar at the top of every screen; press Enter to open the Search page with your term.
+- `GET /api/search?q=&organizationId=&start=&end=` endpoint (read-only; parameters validated).
+
+### Changed
+- All organization, department and project lists and dropdowns are now alphabetical (case-insensitive): Admin department form, Log Time organization, department and project choices, History and Export Report organization pickers, and the Admin lists. Sorting is applied in the database queries and again in each dropdown. Months and years keep their natural order.
+
+### Compatibility
+- No database migration. Existing data files open unchanged.
+
+### Validation
+- TypeScript check and production build passed; all 185 existing API and security checks passed; search and alphabetical ordering verified against a disposable database and in a browser. Windows installer built by the release workflow; native Windows launch not verified here.
+
 ## [1.4.5] - 2026-11-24
 
 ### Fixed

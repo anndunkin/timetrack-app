@@ -9,7 +9,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { type Organization } from "@shared/schema";
-import { MONTH_NAMES_LONG } from "@/lib/utils";
+import { MONTH_NAMES_LONG, sortByName } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
 import {
@@ -220,7 +220,7 @@ export default function ExportReportModal({
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {orgs.map(o => (
+                {sortByName(orgs).map(o => (
                   <SelectItem key={o.id} value={String(o.id)}>
                     <span className="flex items-center gap-2">
                       <span

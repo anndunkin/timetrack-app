@@ -25,7 +25,7 @@ import {
 import { Pencil, Trash2, Clock, Plus, CheckCircle2, Play, Square, TimerReset, RefreshCw, Pause } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { cn, minutesToHHMM, formatDate, todayISO } from "@/lib/utils";
+import { cn, minutesToHHMM, formatDate, todayISO, sortByName } from "@/lib/utils";
 
 const entrySchema = insertTimeEntrySchema.extend({
   hours: z.number().int().min(0).max(23),
@@ -139,15 +139,15 @@ export default function TimeEntryPage() {
   const selectedDeptIds = form.watch("selectedDeptIds") ?? [];
 
   const filteredDepts = useMemo(
-    () => allDepts.filter(d => d.organizationId === selectedOrgId),
+    () => sortByName(allDepts.filter(d => d.organizationId === selectedOrgId)),
     [allDepts, selectedOrgId]
   );
 
   const filteredProjects = useMemo(() => {
     if (selectedDeptIds.length === 0) return [];
-    return allProjects.filter(p =>
+    return sortByName(allProjects.filter(p =>
       selectedDeptIds.every(dId => p.departmentIds.includes(dId))
-    );
+    ));
   }, [allProjects, selectedDeptIds]);
 
   useEffect(() => {
@@ -534,7 +534,7 @@ export default function TimeEntryPage() {
                     disabled={noSetup}
                   >
                     <option value={0}>Select organization…</option>
-                    {[...orgs].sort((a, b) => a.name.localeCompare(b.name)).map(o => (
+                    {sortByName(orgs).map(o => (
                       <option key={o.id} value={o.id}>{o.name}</option>
                     ))}
                   </select>

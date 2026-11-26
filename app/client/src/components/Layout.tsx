@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Clock, Calendar, CalendarDays, BarChart2, Settings, Building2, Sun, Moon, Database, History } from "lucide-react";
+import { Clock, Calendar, CalendarDays, BarChart2, Settings, Building2, Sun, Moon, Database, History, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "./ThemeProvider";
 import { queryClient } from "@/lib/queryClient";
@@ -8,6 +8,7 @@ import { queryClient } from "@/lib/queryClient";
 const navItems = [
   { href: "/",         label: "Log Time",  icon: Clock },
   { href: "/history",  label: "History",   icon: History },
+  { href: "/search",   label: "Search",    icon: Search },
   { href: "/weekly",   label: "Weekly",    icon: Calendar },
   { href: "/monthly",  label: "Monthly",   icon: CalendarDays },
   { href: "/annual",   label: "Annual",    icon: BarChart2 },
@@ -18,7 +19,14 @@ const navItems = [
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
+  const [quickQ, setQuickQ] = useState("");
+  function quickSearch(e: React.FormEvent) {
+    e.preventDefault();
+    const q = quickQ.trim();
+    if (!q) return;
+    navigate(`/search?q=${encodeURIComponent(q)}`);
+  }
   const { theme, toggle } = useTheme();
 
   // Listen for file-switch events sent from the native File menu in main.js.
@@ -89,6 +97,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main content */}
       <main className="flex-1 overflow-y-auto">
+        <form onSubmit={quickSearch} role="search" className="sticky top-0 z-10 flex items-center gap-2 px-6 py-2 border-b bg-background/95 backdrop-blur">
+          <Search size={14} className="text-muted-foreground" />
+          <input
+            data-testid="input-quick-search"
+            aria-label="Search all data"
+            value={quickQ}
+            onChange={e => setQuickQ(e.target.value)}
+            placeholder="Search all data and press Enter…"
+            className="flex-1 h-8 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          />
+        </form>
         <div className="max-w-5xl mx-auto px-6 py-8">
           {children}
         </div>

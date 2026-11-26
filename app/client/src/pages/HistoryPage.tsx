@@ -19,7 +19,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Clock, Pencil, Trash2, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
-import { cn, minutesToHHMM, formatDate } from "@/lib/utils";
+import { cn, minutesToHHMM, formatDate, sortByName } from "@/lib/utils";
 
 const PAGE_SIZE = 25;
 
@@ -144,7 +144,7 @@ export default function HistoryPage() {
             className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
             <option value="">All organizations</option>
-            {[...orgs].sort((a, b) => a.name.localeCompare(b.name)).map(org => (
+            {sortByName(orgs).map(org => (
               <option key={org.id} value={String(org.id)}>{org.name}</option>
             ))}
           </select>

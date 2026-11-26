@@ -13,6 +13,7 @@ import AnnualPage from "./pages/AnnualPage";
 import AdminPage from "./pages/AdminPage";
 import SettingsPage from "./pages/SettingsPage";
 import DatabasePage from "./pages/DatabasePage";
+import SearchPage from "./pages/SearchPage";
 import NotFound from "./pages/not-found";
 
 export default function App() {
@@ -27,6 +28,7 @@ export default function App() {
               <Route path="/weekly" component={WeeklyPage} />
               <Route path="/monthly" component={MonthlyPage} />
               <Route path="/annual" component={AnnualPage} />
+              <Route path="/search" component={SearchPage} />
               <Route path="/admin" component={AdminPage} />
               <Route path="/settings" component={SettingsPage} />
               <Route path="/database" component={DatabasePage} />

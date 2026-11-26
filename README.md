@@ -22,6 +22,8 @@ Download the Windows x64 installer from the [latest TimeTrack release](https://g
 - **Multi-department time entries** — log a single task against multiple departments; time is split equally across them in all reports
 - **Live timer** — start/stop a running timer on the Log Time page, then click "Use Time" to copy the elapsed time into the entry form
 - **Smart date default** — when logging a new entry, the date field defaults to the date of the entry you logged most recently (even if it isn't today, and including back-dated entries), so entering several entries for a past day doesn't require re-picking the date each time (falls back to today when there are no entries)
+- **Search** — the **Search** page (and the quick-search bar at the top of every screen) finds time entries, organizations, departments, projects and recurring tasks. All words must match, case is ignored, and you can narrow by organization and date range
+- **Alphabetical lists** — organization, department and project lists and dropdowns are sorted A to Z everywhere (months and years keep calendar order)
 - **Edit any entry** — the **History** page lists *all* time entries with organization and date-range filtering and pagination, so you're no longer limited to the recent entries on the Log Time page. Choose an organization (or leave **All organizations** selected), optionally enter From/To dates, and click **Apply**. Organization and date filters work independently or together; **Clear** resets all filters. Counts and pagination reflect the filtered results. Click the pencil on any entry (however old) to open it in the same edit form used for recent entries
 - **Weekly view** — day-by-day breakdown with per-project summary sidebar
 - **Annual summary** — monthly bar chart, by-org/dept/project breakdowns, average per week and per month (both calculated over elapsed periods, not the full year)
@@ -60,7 +62,7 @@ npm run make
 The installer will be produced at:
 
 ```
-dist-electron\TimeTrack Setup 1.4.5.exe
+dist-electron\TimeTrack Setup 1.5.0.exe
 ```
 
 Double-click it to install on any Windows 10 / 11 x64 machine. The installer creates Desktop and Start Menu shortcuts.
@@ -278,7 +280,7 @@ timetracker-electron/
 │   │   └── storage.ts   ← sql.js storage layer, DB migrations, switchDb()
 │   ├── client/
 │   │   └── src/
-│   │       ├── pages/   ← TimeEntryPage, HistoryPage, WeeklyPage, AnnualPage, AdminPage, SettingsPage
+│   │       ├── pages/   ← TimeEntryPage, HistoryPage, SearchPage, WeeklyPage, AnnualPage, AdminPage, SettingsPage
 │   │       ├── lib/     ← queryClient, files.ts (IPC bridge), utils.ts (date helpers)
 │   │       └── components/
 │   ├── shared/
@@ -336,6 +338,7 @@ timetracker-electron/
 
 | Tag | Description |
 |-----|-------------|
+| v1.5.0 | **Search** page and quick-search bar across entries, organizations, departments, projects and recurring tasks; all organization, department and project dropdowns sorted A to Z |
 | v1.4.5 | Log Time organization dropdown sorts names A to Z; History filtering is unchanged |
 | v1.4.4 | Restored readable sidebar colors |
 | v1.4.3 | Electron and app dependency security refresh |

@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Pencil, Trash2, Building2, Layers, FolderKanban, Clock, Download } from "lucide-react";
-import { cn, minutesToDecimal } from "@/lib/utils";
+import { cn, minutesToDecimal, sortByName } from "@/lib/utils";
 
 // ─── Color picker ─────────────────────────────────────────────
 const PALETTE = [
@@ -133,7 +133,7 @@ function DeptForm({ dept, orgs, onDone }: { dept?: Department; orgs: Organizatio
                 onChange={e => field.onChange(Number(e.target.value))}
                 className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
               >
-                {orgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                {sortByName(orgs).map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
               </select>
             </FormControl>
             <FormMessage />
@@ -221,7 +221,7 @@ function ProjectForm({ project, depts, onDone }: {
           <FormLabel>Departments</FormLabel>
           <p className="text-xs text-muted-foreground mb-2">This project will appear in every selected department's time-entry dropdown.</p>
           <div className="flex flex-wrap gap-2 mt-1">
-            {depts.map(d => (
+            {sortByName(depts).map(d => (
               <button
                 type="button"
                 key={d.id}

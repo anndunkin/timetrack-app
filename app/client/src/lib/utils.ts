@@ -107,3 +107,9 @@ export const MONTH_NAMES_LONG = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
+
+/** Return a copy of `items` sorted alphabetically (case-insensitive, natural number order) by name. */
+export function sortByName<T extends { name: string }>(items: readonly T[]): T[] {
+  return [...items].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true }));
+}

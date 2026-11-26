@@ -89,6 +89,61 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ ok: true });
   });
 
+  // -- Search --
+  // Case-insensitive search across time entries (description, date, organization,
+  // department and project names), organizations, departments, projects and
+  // recurring tasks. Every whitespace-separated term must match somewhere.
+  app.get("/api/search", (req, res) => {
+    const q = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 200) : "";
+    const start = typeof req.query.start === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.start) ? req.query.start : undefined;
+    const end = typeof req.query.end === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.end) ? req.query.end : undefined;
+    let organizationId: number | undefined;
+    if (req.query.organizationId !== undefined && req.query.organizationId !== "") {
+      const raw = req.query.organizationId;
+      if (typeof raw !== "string" || !/^[1-9]\d*$/.test(raw) || !Number.isSafeInteger(Number(raw))) {
+        return res.status(400).json({ error: "organizationId must be a positive integer" });
+      }
+      organizationId = Number(raw);
+    }
+    const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+    const empty = { query: q, entries: [], entryTotal: 0, organizations: [], departments: [], projects: [], recurring: [] };
+    if (terms.length === 0) return res.json(empty);
+
+    const orgs = storage.getOrganizations();
+    const depts = storage.getDepartments();
+    const projects = storage.getProjects();
+    const orgName = (id: number) => orgs.find(o => o.id === id)?.name ?? "";
+    const deptName = (id: number) => depts.find(d => d.id === id)?.name ?? "";
+    const projName = (id: number) => projects.find(p => p.id === id)?.name ?? "";
+    const matches = (...parts: (string | null | undefined)[]) => {
+      const hay = parts.filter(Boolean).join(" \u0001 ").toLowerCase();
+      return terms.every(t => hay.includes(t));
+    };
+
+    const inRange = (d: string) => (!start || d >= start) && (!end || d <= end);
+    const allEntries = (start && end ? storage.getTimeEntriesByDateRange(start, end) : storage.getTimeEntries())
+      .filter(e => inRange(e.date) && (organizationId === undefined || e.organizationId === organizationId));
+    const matched = allEntries.filter(e => matches(
+      e.description, e.date, orgName(e.organizationId), projName(e.projectId),
+      ...e.departmentIds.map(deptName),
+    ));
+    // Stable order: newest first.
+    matched.sort((a, b) => (a.date === b.date ? b.id - a.id : a.date < b.date ? 1 : -1));
+    const LIMIT = 200;
+
+    res.json({
+      query: q,
+      entries: matched.slice(0, LIMIT),
+      entryTotal: matched.length,
+      organizations: organizationId === undefined ? orgs.filter(o => matches(o.name)) : [],
+      departments: depts.filter(d => (organizationId === undefined || d.organizationId === organizationId) && matches(d.name, orgName(d.organizationId))),
+      projects: projects.filter(p => matches(p.name, ...p.departmentIds.map(deptName))),
+      recurring: storage.getRecurringTasks().filter(t =>
+        (organizationId === undefined || t.organizationId === organizationId) &&
+        matches(t.description, t.frequency, orgName(t.organizationId), projName(t.projectId), ...t.departmentIds.map(deptName))),
+    });
+  });
+
   // -- Time Entries --
   app.get("/api/time-entries", (req, res) => {
     const { start, end, page, pageSize } = req.query as {

@@ -173,7 +173,7 @@ export function exportOrgDb(orgId: number, destPath: string): void {
 
   // ── Copy departments ─────────────────────────────────────────────────────
   const depts = toObjects<any>(db.exec(
-    "SELECT * FROM departments WHERE organization_id = ?", [orgId]
+    "SELECT * FROM departments WHERE organization_id = ? ORDER BY name COLLATE NOCASE, id", [orgId]
   ));
   const deptIds = depts.map((d: any) => d.id as number);
   for (const d of depts) {
@@ -184,7 +184,7 @@ export function exportOrgDb(orgId: number, destPath: string): void {
   // ── Copy projects linked to any of those departments ─────────────────────
   // A project belongs here if any entry in its department_ids JSON array
   // matches one of the org's department IDs.
-  const allProjects = toObjects<any>(db.exec("SELECT * FROM projects"));
+  const allProjects = toObjects<any>(db.exec("SELECT * FROM projects ORDER BY name COLLATE NOCASE, id"));
   const orgProjects = allProjects.filter((p: any) => {
     try {
       const ids: number[] = JSON.parse(p.department_ids ?? "[]");
@@ -692,7 +692,7 @@ export const storage: IStorage = {
 
   // --- Organizations ---
   getOrganizations() {
-    return all<Record<string, unknown>>("SELECT * FROM organizations").map(mapOrg);
+    return all<Record<string, unknown>>("SELECT * FROM organizations ORDER BY name COLLATE NOCASE, id").map(mapOrg);
   },
   createOrganization(data) {
     const id = run("INSERT INTO organizations (name, color) VALUES (?, ?)", [data.name, data.color]);
@@ -709,10 +709,10 @@ export const storage: IStorage = {
 
   // --- Departments ---
   getDepartments() {
-    return all<Record<string, unknown>>("SELECT * FROM departments").map(mapDept);
+    return all<Record<string, unknown>>("SELECT * FROM departments ORDER BY name COLLATE NOCASE, id").map(mapDept);
   },
   getDepartmentsByOrg(orgId) {
-    return all<Record<string, unknown>>("SELECT * FROM departments WHERE organization_id = ?", [orgId]).map(mapDept);
+    return all<Record<string, unknown>>("SELECT * FROM departments WHERE organization_id = ? ORDER BY name COLLATE NOCASE, id", [orgId]).map(mapDept);
   },
   createDepartment(data) {
     const id = run("INSERT INTO departments (organization_id, name) VALUES (?, ?)", [data.organizationId, data.name]);
@@ -729,10 +729,10 @@ export const storage: IStorage = {
 
   // --- Projects ---
   getProjects() {
-    return all<Record<string, unknown>>("SELECT * FROM projects").map(mapProject).map(parseProject);
+    return all<Record<string, unknown>>("SELECT * FROM projects ORDER BY name COLLATE NOCASE, id").map(mapProject).map(parseProject);
   },
   getProjectsByDepartment(deptId) {
-    return all<Record<string, unknown>>("SELECT * FROM projects")
+    return all<Record<string, unknown>>("SELECT * FROM projects ORDER BY name COLLATE NOCASE, id")
       .map(mapProject)
       .map(parseProject)
       .filter((p) => p.departmentIds.includes(deptId));
